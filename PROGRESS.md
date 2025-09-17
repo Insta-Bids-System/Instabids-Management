@@ -13,12 +13,12 @@
 #### User Authentication
 ```yaml
 Spec: COMPLETED ✅
-Plan: NOT CREATED
-Tasks: NOT CREATED
-Backend: NOT STARTED
+Plan: COMPLETED ✅
+Tasks: COMPLETED ✅
+Backend: IN PROGRESS 🔄
 Frontend: NOT STARTED
 Tests: NOT STARTED
-Status: 15% Complete
+Status: 30% Complete
 ```
 
 #### Property Management
