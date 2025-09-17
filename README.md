@@ -1,14 +1,15 @@
 # InstaBids Management Platform
 
-A comprehensive property management system for coordinating maintenance and repairs across multiple properties with AI-powered features.
+A marketplace platform connecting property managers with qualified contractors for maintenance and repairs, featuring AI-powered project scoping and quote standardization.
 
 ## 🎯 Overview
 
-InstaBids Management transforms how property managers handle maintenance by providing:
-- **SmartScope™**: AI-powered project scoping from photos
-- **Unified contractor management**: Streamlined bidding and communication
-- **Intelligent project routing**: Match projects with the right contractors
-- **Mobile-first design**: Full functionality on iOS and Android
+InstaBids Management revolutionizes property maintenance by creating a frictionless marketplace that:
+- **Eliminates site visits**: SmartScope™ AI analyzes photos to create detailed work scopes
+- **Standardizes quotes**: Multi-format quote collection with automatic standardization
+- **Auto-matches contractors**: Intelligent matching based on trade, location, and availability
+- **Saves 50% time**: <2 minute project creation with automated contractor invitations
+- **Ensures quality**: Verified contractor credentials and performance tracking
 
 ## 🏗️ Tech Stack
 
@@ -81,25 +82,34 @@ cd mobile && expo start
 cd api && uvicorn main:app --reload
 ```
 
-## 📊 Features
+## 📊 Development Status
 
-### Phase 1 (Weeks 1-4)
-- ✅ User Authentication
-- ⏳ Property Management
-- ⏳ Project Creation
-- ⏳ SmartScope MVP
+### ✅ Week 1-2: Foundation (COMPLETE)
+- ✅ Authentication System (9 endpoints, JWT, rate limiting)
+- ✅ Property Management (14 endpoints, full CRUD)
+- ✅ Database Schema (9 tables, RLS policies)
+- ✅ File Upload System
 
-### Phase 2 (Weeks 5-8)
-- Quote Collection
-- Basic Standardization
-- Notification System
-- Analytics Dashboard
+### 🚧 Week 2-3: Marketplace Core (IN PROGRESS)
+- ✅ Project Creation Spec & Plan
+- ✅ Contractor Onboarding Spec & Plan  
+- ✅ Quote Submission Spec & Plan
+- ✅ SmartScope AI Spec & Plan
+- ⏳ Project API Implementation
+- ⏳ Contractor Registration System
+- ⏳ Quote Collection Engine
 
-### Phase 3 (Weeks 9-12)
-- AI Recommendations
-- Mobile Apps
-- Contractor Portal
-- Advanced Features
+### 📋 Week 3-4: Intelligence Layer (PLANNED)
+- SmartScope AI Integration (OpenAI Vision)
+- Quote Standardization Engine
+- Contractor Matching Algorithm
+- Automated Invitations
+
+### 🎯 Week 4: Beta Ready
+- Mobile App Components
+- End-to-End Testing
+- Production Deployment
+- 10 PM + 50 Contractor Onboarding
 
 ## 🔗 Links
 
