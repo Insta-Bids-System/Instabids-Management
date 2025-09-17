@@ -12,15 +12,15 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 
 ### ⏳ Pending (Not Applied)
 ```sql
--- 002_projects_and_contractors.sql
+-- 003_projects_and_contractors.sql
 -- Creates: projects, contractors, invitations tables
 -- Status: NOT APPLIED
 
--- 003_quotes_and_messaging.sql
+-- 004_quotes_and_messaging.sql
 -- Creates: quotes, messages, awards tables
 -- Status: NOT APPLIED
 
--- 004_ai_and_memory.sql
+-- 005_ai_and_memory.sql
 -- Creates: property_memory, ai_agent_logs tables
 -- Status: NOT APPLIED
 ```
@@ -32,6 +32,13 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 - **Tables Created**: organizations, user_profiles, properties
 - **Indexes**: 4 indexes for performance
 - **RLS Policies**: Full security policies enabled
+- **Status**: ✅ SUCCESS
+
+#### 002_auth_extensions.sql
+- **Applied**: 2025-01-17 18:45:00 UTC
+- **Tables Created**: auth_audit_log, user_sessions, password_history
+- **Indexes**: 9 indexes for performance
+- **RLS Policies**: User-scoped policies
 - **Status**: ✅ SUCCESS
 
 ## 📝 How to Apply Migrations
@@ -144,7 +151,8 @@ ORDER BY table_name;
 | Date | Migration | Applied By | Notes |
 |------|-----------|------------|-------|
 | 2025-01-17 | 001_initial_schema | Claude | Organizations, users, properties tables with RLS |
+| 2025-01-17 | 002_auth_extensions | Claude | Audit logs, sessions, password history tables |
 
 ---
-Last Updated: 2025-01-17 17:15 UTC
-Total Migrations: 1 applied, 3 pending
+Last Updated: 2025-01-17 18:45 UTC
+Total Migrations: 2 applied, 3 pending

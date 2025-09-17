@@ -34,36 +34,36 @@
 ## Database Tasks (1 hour)
 
 ### Migration 002 [P]
-- [ ] Create `migrations/002_auth_extensions.sql`
-- [ ] Add auth_audit_log table
-- [ ] Add password_history table
-- [ ] Add user_sessions table
-- [ ] Apply migration to Supabase
-- [ ] Update `migrations/applied.md`
+- [x] Create `migrations/002_auth_extensions.sql`
+- [x] Add auth_audit_log table
+- [x] Add password_history table
+- [x] Add user_sessions table
+- [x] Apply migration to Supabase
+- [x] Update `migrations/applied.md`
 
 ## Frontend Tasks (4 hours)
 
 ### Next.js Setup [P]
-- [ ] Create `web/package.json` with dependencies
-- [ ] Configure `web/next.config.js`
-- [ ] Set up `web/tailwind.config.js`
-- [ ] Create `web/.env.local.example`
-- [ ] Install Supabase client libraries### Auth Components
-- [ ] Create `web/lib/supabase.ts` client
-- [ ] Create `web/contexts/AuthContext.tsx`
-- [ ] Create `web/hooks/useAuth.ts`
-- [ ] Create `web/components/auth/LoginForm.tsx`
-- [ ] Create `web/components/auth/RegisterForm.tsx`
+- [x] Create `web/package.json` with dependencies
+- [x] Configure `web/next.config.js`
+- [x] Set up `web/tailwind.config.js`
+- [x] Create `web/.env.local.example`
+- [x] Install Supabase client libraries### Auth Components
+- [x] Create `web/lib/supabase.ts` client
+- [x] Create `web/contexts/AuthContext.tsx`
+- [x] Create `web/hooks/useAuth.ts`
+- [x] Create `web/components/auth/LoginForm.tsx`
+- [x] Create `web/components/auth/RegisterForm.tsx`
 - [ ] Create `web/components/auth/ForgotPasswordForm.tsx`
 - [ ] Create `web/components/auth/VerifyEmailForm.tsx`
 
 ### Pages & Routes
-- [ ] Create `web/app/login/page.tsx`
-- [ ] Create `web/app/register/page.tsx`
+- [x] Create `web/app/login/page.tsx`
+- [x] Create `web/app/register/page.tsx`
 - [ ] Create `web/app/forgot-password/page.tsx`
 - [ ] Create `web/app/verify-email/page.tsx`
-- [ ] Create `web/app/dashboard/page.tsx` (protected)
-- [ ] Implement route protection middleware
+- [x] Create `web/app/dashboard/page.tsx` (protected)
+- [x] Implement route protection middleware
 
 ## Testing Tasks (2 hours)
 
