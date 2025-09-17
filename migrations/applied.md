@@ -12,17 +12,22 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 
 ### ⏳ Pending (Not Applied)
 ```sql
--- 003_projects_and_contractors.sql
+-- 003_property_management.sql
+-- Extends: properties table with full schema
+-- Creates: property_groups, property_group_members, property_audit_log
+-- Status: READY TO APPLY
+
+-- 004_projects_and_contractors.sql
 -- Creates: projects, contractors, invitations tables
--- Status: NOT APPLIED
+-- Status: NOT CREATED
 
--- 004_quotes_and_messaging.sql
+-- 005_quotes_and_messaging.sql
 -- Creates: quotes, messages, awards tables
--- Status: NOT APPLIED
+-- Status: NOT CREATED
 
--- 005_ai_and_memory.sql
+-- 006_ai_and_memory.sql
 -- Creates: property_memory, ai_agent_logs tables
--- Status: NOT APPLIED
+-- Status: NOT CREATED
 ```
 
 ### ✅ Applied Migrations
@@ -40,6 +45,16 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 - **Indexes**: 9 indexes for performance
 - **RLS Policies**: User-scoped policies
 - **Status**: ✅ SUCCESS
+
+#### 003_property_management.sql
+- **Applied**: NOT YET - READY TO APPLY
+- **Tables Extended**: properties (full schema with 15+ new columns)
+- **Tables Created**: property_groups, property_group_members, property_audit_log
+- **Enums Created**: property_type, property_status
+- **Indexes**: 7 indexes for performance including GIST for coordinates
+- **RLS Policies**: Full security for all property tables
+- **Features**: Soft delete, audit logging, geocoding support
+- **Status**: ⏳ PENDING
 
 ## 📝 How to Apply Migrations
 
@@ -152,7 +167,8 @@ ORDER BY table_name;
 |------|-----------|------------|-------|
 | 2025-01-17 | 001_initial_schema | Claude | Organizations, users, properties tables with RLS |
 | 2025-01-17 | 002_auth_extensions | Claude | Audit logs, sessions, password history tables |
+| 2025-01-17 | 003_property_management | PENDING | Full property management with groups, audit, geocoding |
 
 ---
-Last Updated: 2025-01-17 18:45 UTC
-Total Migrations: 2 applied, 3 pending
+Last Updated: 2025-01-17 20:30 UTC
+Total Migrations: 2 applied, 1 ready, 3 not created
