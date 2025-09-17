@@ -12,17 +12,8 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 
 ### ⏳ Pending (Not Applied)
 ```sql
--- 003_property_management.sql
--- Extends: properties table with full schema
--- Creates: property_groups, property_group_members, property_audit_log
--- Status: READY TO APPLY
-
--- 004_projects_and_contractors.sql
--- Creates: projects, contractors, invitations tables
--- Status: NOT CREATED
-
 -- 005_quotes_and_messaging.sql
--- Creates: quotes, messages, awards tables
+-- Creates: messaging system tables
 -- Status: NOT CREATED
 
 -- 006_ai_and_memory.sql
@@ -47,14 +38,23 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 - **Status**: ✅ SUCCESS
 
 #### 003_property_management.sql
-- **Applied**: NOT YET - READY TO APPLY
+- **Applied**: 2025-01-17 21:00:00 UTC
 - **Tables Extended**: properties (full schema with 15+ new columns)
 - **Tables Created**: property_groups, property_group_members, property_audit_log
 - **Enums Created**: property_type, property_status
 - **Indexes**: 7 indexes for performance including GIST for coordinates
 - **RLS Policies**: Full security for all property tables
 - **Features**: Soft delete, audit logging, geocoding support
-- **Status**: ⏳ PENDING
+- **Status**: ✅ SUCCESS
+
+#### 004_marketplace_core.sql
+- **Applied**: 2025-01-17 21:15:00 UTC
+- **Tables Created**: projects, project_media, contractors, contractor_credentials, contractor_availability, contractor_portfolio, quotes, quote_line_items, invitations, awards, smartscope_analyses, project_questions (12 tables)
+- **Enums Created**: urgency_level, project_status, project_category, business_type, verification_status, service_area_type, quote_status, submission_method, invitation_status
+- **Indexes**: 16 performance indexes for all core tables
+- **RLS Policies**: Security policies for projects, contractors, quotes, invitations
+- **Features**: Complete marketplace platform, SmartScope AI, quote standardization, contractor onboarding
+- **Status**: ✅ SUCCESS
 
 ## 📝 How to Apply Migrations
 
@@ -167,8 +167,10 @@ ORDER BY table_name;
 |------|-----------|------------|-------|
 | 2025-01-17 | 001_initial_schema | Claude | Organizations, users, properties tables with RLS |
 | 2025-01-17 | 002_auth_extensions | Claude | Audit logs, sessions, password history tables |
-| 2025-01-17 | 003_property_management | PENDING | Full property management with groups, audit, geocoding |
+| 2025-01-17 | 003_property_management | Claude | Full property management with groups, audit, geocoding |
+| 2025-01-17 | 004_marketplace_core | Claude | Complete marketplace platform - 12 tables, SmartScope AI, contractor onboarding |
 
 ---
-Last Updated: 2025-01-17 20:30 UTC
-Total Migrations: 2 applied, 1 ready, 3 not created
+Last Updated: 2025-01-17 21:15 UTC
+Total Migrations: 4 applied, 0 ready, 2 not created
+Database Tables: 21 total (organizations, user_profiles, auth tables, property management, marketplace core)
