@@ -2,6 +2,8 @@
 
 ## Feature Name: Contractor Registration & Profile
 
+⚠️ **INTEGRATION NOTE**: This spec covers INTERNAL contractor registration (contractors who come to our platform). There is a separate EXTERNAL contractor acquisition system being built that actively recruits contractors via web search, email, and phone outreach. **STOP and check with Justin before implementing** - this may need to integrate with the external system instead of building standalone registration.
+
 ## Overview
 Enable contractors to register, get verified, and set up comprehensive profiles that showcase their capabilities and define their service parameters for automatic job matching.
 
