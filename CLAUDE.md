@@ -53,9 +53,9 @@ InstaBids-Management/
   - [ ] Frontend connected
 
 ## 📊 Database Status
-**Schema Version**: 0.0.0
-**Last Migration**: None
-**Tables Created**: None
+**Schema Version**: 0.0.1
+**Last Migration**: 001_initial_schema (2025-01-17)
+**Tables Created**: organizations, user_profiles, properties
 
 See `migrations/applied.md` for what's in production
 
