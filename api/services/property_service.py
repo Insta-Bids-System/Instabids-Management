@@ -15,7 +15,7 @@ from ..models.property import (
     PropertyBulkCreate, PropertyImport, PropertyExport,
     PropertyType, PropertyStatus, PropertyCoordinates
 )
-from .supabase import SupabaseService
+from .supabase import supabase_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class PropertyService:
     
     def __init__(self, supabase: Client = None):
         """Initialize property service."""
-        self.supabase = supabase or SupabaseService.get_client()
+        self.supabase = supabase or supabase_service.client
         self.geocoding_api_key = None  # Set from environment
     
     async def create_property(

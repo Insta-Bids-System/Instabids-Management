@@ -9,7 +9,7 @@ from datetime import datetime
 
 from .config import settings
 from .models.user import User
-from .services.supabase import SupabaseService
+from .services.supabase import supabase_service
 
 security = HTTPBearer()
 
@@ -44,7 +44,7 @@ async def get_current_user(
             )
         
         # Get user from database
-        supabase = SupabaseService.get_client()
+        supabase = supabase_service.client
         result = supabase.table('user_profiles').select('*').eq(
             'id', user_id
         ).execute()
