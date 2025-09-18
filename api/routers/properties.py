@@ -15,7 +15,7 @@ from ..models.property import (
     PropertyImport, PropertyImportResponse, PropertyExport
 )
 from ..services.property_service import PropertyService
-from ..services.supabase import SupabaseService
+from ..services.supabase import supabase_service
 from ..dependencies import get_current_user, get_organization_id
 from ..models.user import User
 
@@ -378,7 +378,7 @@ async def list_property_groups(
 ):
     """List all property groups in the organization."""
     # Get groups from database
-    supabase = SupabaseService.get_client()
+    supabase = supabase_service.client
     result = supabase.table('property_groups').select('*').eq(
         'organization_id', str(current_user.organization_id)
     ).execute()
@@ -434,8 +434,9 @@ async def remove_properties_from_group(
         )
     
     # Remove properties
-    supabase = SupabaseService.get_client()
+    supabase = supabase_service.client
     for property_id in member_data.property_ids:
         supabase.table('property_group_members').delete().eq(
             'group_id', str(group_id)
         ).eq('property_id', str(property_id)).execute()
+
