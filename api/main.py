@@ -30,9 +30,12 @@ async def lifespan(app: FastAPI):
         raise
     
     yield
-    
+
     # Shutdown
-    logger.info("Shutting down InstaBids Management API...")# Create FastAPI app
+    logger.info("Shutting down InstaBids Management API...")
+
+
+# Create FastAPI app
 app = FastAPI(
     title="InstaBids Management API",
     description="Property management platform API",
@@ -97,5 +100,5 @@ if __name__ == "__main__":
         "main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=settings.api_env == "development"
+        reload=settings.api_env == "development",
     )
