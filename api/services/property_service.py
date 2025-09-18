@@ -9,13 +9,13 @@ from supabase import Client
 import httpx
 import json
 
-from ..models.property import (
+from models.property import (
     Property, PropertyCreate, PropertyUpdate, PropertyFilter,
     PropertyGroup, PropertyGroupCreate, PropertyGroupUpdate,
     PropertyBulkCreate, PropertyImport, PropertyExport,
     PropertyType, PropertyStatus, PropertyCoordinates
 )
-from api.services.supabase import supabase_service
+from services.supabase import supabase_service
 
 logger = logging.getLogger(__name__)
 

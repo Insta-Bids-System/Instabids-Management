@@ -4,10 +4,10 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import settings
-from .middleware.rate_limit import rate_limit_middleware
-from .routers import auth, properties, projects, smartscope
-from .services.supabase import supabase_service
+from config import settings
+from middleware.rate_limit import rate_limit_middleware
+from routers import auth, properties, projects, smartscope
+from services.supabase import supabase_service
 
 # Configure logging
 logging.basicConfig(

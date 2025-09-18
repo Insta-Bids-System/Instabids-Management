@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 
-from ..models.auth import (
+from models.auth import (
     RegisterRequest, RegisterResponse,
     LoginRequest, AuthResponse,
     RefreshTokenRequest, VerifyEmailRequest,
@@ -13,8 +13,8 @@ from ..models.auth import (
     MessageResponse, UserResponse,
     OrganizationCreate, UserProfileCreate
 )
-from ..services.supabase import supabase_service
-from ..config import settings
+from services.supabase import supabase_service
+from config import settings
 
 router = APIRouter()
 security = HTTPBearer()
@@ -32,7 +32,9 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.jwt_refresh_token_expire_days)
     to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UserResponse:
+    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UserResponse:
     """Validate JWT token and return current user"""
     token = credentials.credentials
     try:
@@ -64,7 +66,7 @@ async def register(request: RegisterRequest):
     try:
         # Create organization if property manager
         org_id = None
-        if request.user_type == "property_manager" and request.organization_name:            # Create organization in database
+        if request.user_type == "property_manager" and request.organization_name:
             org_response = supabase_service.client.table("organizations").insert({
                 "name": request.organization_name,
                 "type": "property_management"
@@ -80,13 +82,21 @@ async def register(request: RegisterRequest):
             "phone": request.phone
         }
         
-        auth_user = await supabase_service.create_user(
-            email=request.email,
-            password=request.password,
-            user_data=user_metadata
-        )
+        # Use regular sign-up instead of admin create
+        auth_response = supabase_service.client.auth.sign_up({
+            "email": request.email,
+            "password": request.password,
+            "options": {
+                "data": user_metadata
+            }
+        })
         
-        # Create user profile in database
+        if not auth_response.user:
+            raise Exception("Failed to create user account")
+        
+        auth_user = auth_response.user
+        
+        # Create user profile
         profile_response = supabase_service.client.table("user_profiles").insert({
             "id": auth_user.id,
             "email": request.email,
@@ -95,7 +105,7 @@ async def register(request: RegisterRequest):
             "phone": request.phone,
             "organization_id": org_id,
             "profile_data": {}
-        }).execute()        
+        }).execute()
         return RegisterResponse(
             user_id=auth_user.id,
             email=request.email,
@@ -246,7 +256,8 @@ async def logout(current_user: UserResponse = Depends(get_current_user)):
             message="Logout failed"
         )
 
-@router.post("/verify-email", response_model=MessageResponse)async def verify_email(request: VerifyEmailRequest):
+@router.post("/verify-email", response_model=MessageResponse)
+async def verify_email(request: VerifyEmailRequest):
     """Verify email with token"""
     try:
         # Verify with Supabase Auth

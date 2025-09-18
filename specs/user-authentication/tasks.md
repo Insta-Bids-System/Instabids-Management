@@ -54,14 +54,14 @@
 - [x] Create `web/hooks/useAuth.ts`
 - [x] Create `web/components/auth/LoginForm.tsx`
 - [x] Create `web/components/auth/RegisterForm.tsx`
-- [ ] Create `web/components/auth/ForgotPasswordForm.tsx`
-- [ ] Create `web/components/auth/VerifyEmailForm.tsx`
+- [x] Create `web/components/auth/ForgotPasswordForm.tsx`
+- [x] Create `web/components/auth/VerifyEmailForm.tsx`
 
 ### Pages & Routes
 - [x] Create `web/app/login/page.tsx`
 - [x] Create `web/app/register/page.tsx`
-- [ ] Create `web/app/forgot-password/page.tsx`
-- [ ] Create `web/app/verify-email/page.tsx`
+- [x] Create `web/app/forgot-password/page.tsx`
+- [x] Create `web/app/verify-email/page.tsx`
 - [x] Create `web/app/dashboard/page.tsx` (protected)
 - [x] Implement route protection middleware
 

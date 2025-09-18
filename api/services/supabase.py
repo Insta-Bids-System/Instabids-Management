@@ -1,7 +1,7 @@
 from supabase import create_client, Client
 from typing import Optional, Dict, Any
 import logging
-from ..config import settings
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +38,16 @@ class SupabaseService:
                     settings.supabase_url,
                     settings.supabase_service_key
                 )            
-            logger.info("Supabase clients initialized successfully")
+            logger.info(f"Supabase clients initialized successfully for {settings.supabase_url}")
         except Exception as e:
             logger.error(f"Failed to initialize Supabase clients: {e}")
             raise
+    
+    def force_reinitialize(self):
+        """Force reinitialize clients with current settings"""
+        self._client = None
+        self._service_client = None
+        self._initialize_clients()
     
     @property
     def client(self) -> Client:

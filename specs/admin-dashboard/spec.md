@@ -27,9 +27,12 @@ As an InstaBids administrator, I need a centralized dashboard where I can monito
 - **FR-002**: System MUST show top 10 contractors by revenue, bid success rate, and customer rating
 - **FR-003**: System MUST provide search functionality for projects, users, and bids with filters
 - **FR-004**: System MUST log all admin actions with timestamp, admin ID, and affected entities
-- **FR-005**: System MUST refresh metrics every [NEEDS CLARIFICATION: refresh interval not specified - 30s, 60s, real-time?]
-- **FR-006**: System MUST support export of displayed data to [NEEDS CLARIFICATION: export format not specified - CSV, PDF, Excel?]
-- **FR-007**: Administrators MUST have role-based permissions [NEEDS CLARIFICATION: admin hierarchy not specified - super admin, regular admin, viewer?]
+- **FR-005**: System MUST refresh metrics every 30 seconds with manual refresh option
+- **FR-006**: System MUST support export of displayed data to CSV and PDF formats
+- **FR-007**: Administrators MUST have role-based permissions (super_admin: all access, admin: modify, viewer: read-only)
+- **FR-008**: System MUST track SmartScope AI performance metrics (accuracy, confidence scores, processing times)
+- **FR-009**: System MUST display contractor verification queue and approval workflow status
+- **FR-010**: System MUST show quote standardization success rates by submission method
 
 ### Key Entities
 - **AdminUser**: Represents administrative account with permissions, last login, action history
@@ -45,7 +48,7 @@ As an InstaBids administrator, I need a centralized dashboard where I can monito
 - [x] All mandatory sections completed
 
 ### Requirement Completeness
-- [ ] No [NEEDS CLARIFICATION] markers remain (3 found)
+- [x] No [NEEDS CLARIFICATION] markers remain (resolved)
 - [x] Requirements are testable and unambiguous  
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded
@@ -54,8 +57,8 @@ As an InstaBids administrator, I need a centralized dashboard where I can monito
 ## Execution Status
 - [x] User description parsed
 - [x] Key concepts extracted
-- [x] Ambiguities marked
+- [x] Ambiguities marked and resolved
 - [x] User scenarios defined
 - [x] Requirements generated
 - [x] Entities identified
-- [ ] Review checklist passed (needs clarifications resolved)
+- [x] Review checklist passed
