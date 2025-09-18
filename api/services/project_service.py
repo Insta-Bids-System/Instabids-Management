@@ -18,6 +18,8 @@ from ..models.project import (
 )
 from ..models.user import User
 from .supabase import supabase_service
+
+
 class ProjectService:
     """Encapsulates project specific data access and validation logic."""
 
