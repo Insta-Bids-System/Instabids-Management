@@ -16,6 +16,10 @@ permissions:
   pull-requests: write
   issues: write
 
+# Change this if your Codex handle is different
+env:
+  CODEX_HANDLE: "@codex"               # e.g. "@chatgpt-codex-connector[bot]"
+
 jobs:
   collect:
     if: github.event_name != 'issue_comment'
@@ -166,9 +170,28 @@ jobs:
                 '⚠️ Auto-rebase hit real merge conflicts:',
                 ...files.map(f=>`- \`${f}\``),
                 '',
-                'I already resolved docs/lockfiles/imports/router duplicates. Please post suggested changes only for these files.'
+                'I already resolved docs/lockfiles/imports/router duplicates. Please post **Suggested changes** only for these files.'
               ].join('\n')
             });
+
+      - name: Ping Codex to fix conflicts
+        if: steps.conf.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const prnum = ${{ matrix.pr.number }};
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: prnum,
+              body: `${process.env.CODEX_HANDLE} please fix the merge conflicts by posting GitHub *Suggested changes* only for the files listed above.`
+            }).catch(()=>{});
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: prnum, labels: ['codex']
+            }).catch(()=>{});
+            await github.rest.pulls.requestReviewers({
+              owner, repo, pull_number: prnum, reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
+            }).catch(()=>{});  // ok if the bot can't be a reviewer
 
   one-pr:
     if: github.event_name == 'issue_comment' &&
@@ -302,6 +325,25 @@ jobs:
                 '⚠️ Auto-rebase (manual) hit real merge conflicts:',
                 ...files.map(f=>`- \`${f}\``),
                 '',
-                'I already resolved docs/lockfiles/imports/router duplicates. Please post suggested changes only for these files.'
+                'I already resolved docs/lockfiles/imports/router duplicates. Please post **Suggested changes** only for these files.'
               ].join('\n')
-            })
+            });
+
+      - name: Ping Codex to fix conflicts (manual path)
+        if: steps.conf.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const prnum = Number("${{ steps.pr.outputs.number }}");
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: prnum,
+              body: `${process.env.CODEX_HANDLE} please fix the merge conflicts by posting GitHub *Suggested changes* only for the files listed above.`
+            }).catch(()=>{});
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: prnum, labels: ['codex']
+            }).catch(()=>{});
+            await github.rest.pulls.requestReviewers({
+              owner, repo, pull_number: prnum, reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
+            }).catch(()=>{});
