@@ -17,14 +17,14 @@ from ..models.project import (
     ProjectUpdate,
 )
 from ..models.user import User
-from .supabase import SupabaseService
+from .supabase import supabase_service
 
 
 class ProjectService:
     """Encapsulates project specific data access and validation logic."""
 
     def __init__(self, supabase: Optional[Client] = None) -> None:
-        self.supabase = supabase or SupabaseService.get_client()
+        self.supabase = supabase or supabase_service.client
 
     async def create_project(self, payload: ProjectCreate, current_user: User) -> Project:
         """Create a new project after verifying permissions and inputs."""
