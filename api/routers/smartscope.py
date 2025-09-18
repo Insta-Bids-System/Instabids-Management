@@ -39,7 +39,7 @@ async def get_analysis(
 ) -> SmartScopeAnalysis:
     """Fetch a single SmartScope analysis record."""
 
-    return await service.get_analysis(analysis_id)
+    return await service.get_analysis(analysis_id, current_user)
 
 
 @router.get("/project/{project_id}", response_model=AnalysisListResponse)
@@ -52,7 +52,9 @@ async def list_project_analyses(
 ) -> AnalysisListResponse:
     """List SmartScope analyses for a project with pagination."""
 
-    analyses, total = await service.list_analyses(project_id, page=page, per_page=per_page)
+    analyses, total = await service.list_analyses(
+        project_id, current_user, page=page, per_page=per_page
+    )
     return AnalysisListResponse(
         analyses=analyses,
         total=total,

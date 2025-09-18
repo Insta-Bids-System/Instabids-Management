@@ -86,6 +86,10 @@ class FakeTable:
         self._filters.append({"op": "eq", "key": key, "value": value})
         return self
 
+    def is_(self, key: str, value: Any) -> "FakeTable":
+        self._filters.append({"op": "is", "key": key, "value": value})
+        return self
+
     def gte(self, key: str, value: Any) -> "FakeTable":
         self._filters.append({"op": "gte", "key": key, "value": value})
         return self
@@ -124,6 +128,11 @@ class FakeTable:
                         for r in records
                         if r.get(filt["key"]) and r[filt["key"]] >= filt["value"]
                     ]
+                elif filt["op"] == "is":
+                    if filt["value"] is None:
+                        records = [r for r in records if r.get(filt["key"]) is None]
+                    else:
+                        records = [r for r in records if r.get(filt["key"]) == filt["value"]]
             if self._order:
                 key, desc = self._order
                 records.sort(key=lambda r: r.get(key), reverse=desc)
@@ -144,6 +153,8 @@ class FakeSupabaseClient:
             "smartscope_analyses": [],
             "smartscope_feedback": [],
             "smartscope_costs": [],
+            "projects": [],
+            "properties": [],
         }
 
     def table(self, name: str) -> FakeTable:
@@ -241,8 +252,9 @@ async def test_smartscope_service_processes_and_persists_analysis() -> None:
         cost_monitor=FakeCostMonitor(),
     )
 
+    user_id = uuid4()
     user = User(
-        id=uuid4(),
+        id=user_id,
         email="pm@example.com",
         full_name="Property Manager",
         role="manager",
@@ -252,8 +264,24 @@ async def test_smartscope_service_processes_and_persists_analysis() -> None:
         updated_at=datetime.now(timezone.utc).isoformat(),
     )
 
+    property_id = str(uuid4())
+    project_id = uuid4()
+    supabase.storage["properties"].append(
+        {
+            "id": property_id,
+            "organization_id": None,
+            "manager_id": str(user_id),
+        }
+    )
+    supabase.storage["projects"].append(
+        {
+            "id": str(project_id),
+            "property_id": property_id,
+        }
+    )
+
     request = AnalysisRequest(
-        project_id=uuid4(),
+        project_id=project_id,
         photo_urls=["https://example.com/one.jpg"],
         property_type="Residential",
         area="Bathroom",

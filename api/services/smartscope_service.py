@@ -41,10 +41,92 @@ class SmartScopeService:
         self.vision_service = vision_service or OpenAIVisionService()
         self.cost_monitor = cost_monitor or CostMonitor(supabase=self.supabase)
 
+    def _get_project_and_property(
+        self, project_id: UUID
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Fetch the project and associated property records."""
+
+        project_result = (
+            self.supabase.table("projects")
+            .select("id, property_id")
+            .eq("id", str(project_id))
+            .limit(1)
+            .execute()
+        )
+
+        if not project_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
+
+        project_record = project_result.data[0]
+        property_id = project_record.get("property_id")
+        if not property_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Project is missing associated property information",
+            )
+
+        property_result = (
+            self.supabase.table("properties")
+            .select("id, organization_id, manager_id")
+            .eq("id", property_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not property_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Property not found for project",
+            )
+
+        return project_record, property_result.data[0]
+
+    def _ensure_project_access(self, project_id: UUID, current_user: User) -> None:
+        """Verify the current user can access the supplied project."""
+
+        _, property_record = self._get_project_and_property(project_id)
+
+        organization_id = property_record.get("organization_id")
+        if (
+            current_user.organization_id
+            and organization_id
+            and str(current_user.organization_id) != organization_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this project",
+            )
+
+        manager_id = property_record.get("manager_id")
+        if (
+            current_user.role == "manager"
+            and manager_id
+            and manager_id != str(current_user.id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Managers can only access their assigned projects",
+            )
+
     async def process_analysis(
         self, payload: AnalysisRequest, current_user: User
     ) -> SmartScopeAnalysis:
         """Run the AI pipeline and persist the resulting analysis."""
+
+        self._ensure_project_access(payload.project_id, current_user)
+
+        if (
+            payload.organization_id
+            and current_user.organization_id
+            and payload.organization_id != current_user.organization_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organisation mismatch for SmartScope analysis",
+            )
 
         logger.info("Starting SmartScope analysis for project %s", payload.project_id)
         vision_result = await self.vision_service.analyse(payload)
@@ -109,7 +191,9 @@ class SmartScopeService:
 
         return self._build_analysis_from_record(result.data[0], metadata_dict)
 
-    async def get_analysis(self, analysis_id: UUID) -> SmartScopeAnalysis:
+    async def get_analysis(
+        self, analysis_id: UUID, current_user: User
+    ) -> SmartScopeAnalysis:
         result = (
             self.supabase.table("smartscope_analyses")
             .select("*")
@@ -125,12 +209,25 @@ class SmartScopeService:
             )
 
         record = result.data[0]
+        project_id = record.get("project_id")
+        if not project_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Analysis is missing project context",
+            )
+
+        self._ensure_project_access(UUID(str(project_id)), current_user)
         metadata = self._extract_metadata(record)
         return self._build_analysis_from_record(record, metadata)
 
     async def list_analyses(
-        self, project_id: UUID, page: int = 1, per_page: int = 20
+        self,
+        project_id: UUID,
+        current_user: User,
+        page: int = 1,
+        per_page: int = 20,
     ) -> Tuple[List[SmartScopeAnalysis], int]:
+        self._ensure_project_access(project_id, current_user)
         offset = (page - 1) * per_page
         query = (
             self.supabase.table("smartscope_analyses")
@@ -152,6 +249,9 @@ class SmartScopeService:
     async def submit_feedback(
         self, analysis_id: UUID, payload: FeedbackRequest, current_user: User
     ) -> FeedbackRecord:
+        # Ensure the user has access to the analysis before storing feedback
+        await self.get_analysis(analysis_id, current_user)
+
         feedback_payload = {
             "analysis_id": str(analysis_id),
             "feedback_type": payload.feedback_type,

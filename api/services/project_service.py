@@ -317,7 +317,7 @@ class ProjectService:
             self.supabase.table("properties")
             .select("id")
             .eq("organization_id", str(current_user.organization_id))
-            .eq("deleted_at", None)
+            .is_("deleted_at", None)
         )
 
         if current_user.role == "manager":
