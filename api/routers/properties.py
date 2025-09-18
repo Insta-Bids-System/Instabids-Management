@@ -14,12 +14,19 @@ from ..models.property import (
     PropertyGroupListResponse, PropertyGroupMemberAction,
     PropertyImport, PropertyImportResponse, PropertyExport
 )
+from supabase import Client
+
 from ..services.property_service import PropertyService
-from ..services.supabase import SupabaseService
+from ..services.supabase import supabase_service
 from ..dependencies import get_current_user, get_organization_id
 from ..models.user import User
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
+
+
+def get_supabase_client() -> Client:
+    """Provide the shared Supabase client instance."""
+    return supabase_service.client
 
 # Property CRUD Endpoints
 
@@ -374,11 +381,10 @@ async def create_property_group(
 @router.get("/groups", response_model=PropertyGroupListResponse)
 async def list_property_groups(
     current_user: User = Depends(get_current_user),
-    service: PropertyService = Depends(lambda: PropertyService())
+    supabase: Client = Depends(get_supabase_client)
 ):
     """List all property groups in the organization."""
     # Get groups from database
-    supabase = SupabaseService.get_client()
     result = supabase.table('property_groups').select('*').eq(
         'organization_id', str(current_user.organization_id)
     ).execute()
@@ -423,7 +429,8 @@ async def remove_properties_from_group(
     group_id: UUID,
     member_data: PropertyGroupMemberAction,
     current_user: User = Depends(get_current_user),
-    service: PropertyService = Depends(lambda: PropertyService())
+    service: PropertyService = Depends(lambda: PropertyService()),
+    supabase: Client = Depends(get_supabase_client)
 ):
     """Remove properties from a group."""
     # Check permissions
@@ -434,7 +441,6 @@ async def remove_properties_from_group(
         )
     
     # Remove properties
-    supabase = SupabaseService.get_client()
     for property_id in member_data.property_ids:
         supabase.table('property_group_members').delete().eq(
             'group_id', str(group_id)
