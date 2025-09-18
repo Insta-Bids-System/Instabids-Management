@@ -17,7 +17,7 @@ permissions:
   issues: write
 
 env:
-  CODEX_HANDLE: "@chatgpt-codex-connector"
+  CODEX_HANDLE: "@codex"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
