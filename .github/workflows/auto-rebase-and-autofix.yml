@@ -1,0 +1,243 @@
+name: Auto-rebase PRs and autofix trivial conflicts
+
+on:
+  push:
+    branches: [ main ]         # rebase all open PRs whenever main moves
+  schedule:
+    - cron: "*/20 * * * *"     # keep PRs fresh even if main is quiet
+  issue_comment:
+    types: [created]           # manual trigger: comment "/autofix" on a PR
+  workflow_dispatch: {}        # manual run from Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  collect:
+    if: github.event_name != 'issue_comment'
+    runs-on: ubuntu-latest
+    outputs:
+      prs: ${{ steps.out.outputs.prs }}
+    steps:
+      - id: out
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+            });
+            const target = prs.filter(pr => pr.base.ref === 'main').map(pr => pr.number);
+            core.setOutput('prs', JSON.stringify(target));
+
+  batch-update:
+    if: github.event_name != 'issue_comment' && fromJSON(needs.collect.outputs.prs).length > 0
+    needs: collect
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pr: ${{ fromJSON(needs.collect.outputs.prs) }}
+      max-parallel: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Checkout PR branch
+        run: gh pr checkout ${{ matrix.pr }}
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+
+      - name: Configure bot
+        run: |
+          git config user.name "autorebase-bot"
+          git config user.email "autorebase-bot@users.noreply.github.com"
+          git config rerere.enabled true
+
+      - name: Rebase on latest main (allow conflicts)
+        run: |
+          git fetch origin main
+          git rebase origin/main || true
+
+      - name: Autofix common conflicts (md/lockfiles + python imports/routers)
+        run: |
+          python - <<'PY'
+          import re, subprocess, pathlib
+          def sh(cmd): subprocess.run(cmd, shell=True, check=False)
+
+          # Resolve Markdown by dropping conflict markers (union)
+          for p in pathlib.Path('.').rglob('*.md'):
+              t = p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  t = re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n','',t,flags=re.M)
+                  p.write_text(t)
+                  sh(f"git add {p}")
+
+          # Prefer ours for common lockfiles
+          for name in ['package-lock.json','yarn.lock','pnpm-lock.yaml','poetry.lock']:
+              p = pathlib.Path(name)
+              if p.exists(): sh(f"git checkout --ours {name} && git add {name}")
+
+          # Python: union/dedupe imports; dedupe duplicate app.include_router blocks
+          CONFLICT = re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
+          def dedupe(xs):
+              out=[]; seen=set()
+              for x in xs:
+                  if x not in seen: out.append(x); seen.add(x)
+              return out
+          def merge(a,b):
+              A=[l.rstrip() for l in a.strip().splitlines()]
+              B=[l.rstrip() for l in b.strip().splitlines()]
+              if ''.join(A)==''.join(B): return '\n'.join(A)+'\n'
+              if all(l.startswith(('import ','from ')) or l=='' for l in A+B):
+                  imp=dedupe([*A,*B]); imp=[l for l in imp if l]; imp.sort(); return '\n'.join(imp)+'\n'
+              if 'app.include_router' in '\n'.join([*A,*B]):
+                  def blocks(L):
+                      buf=[]; out=[]
+                      for l in L+['']:
+                          buf.append(l)
+                          if l.strip().startswith(')') or l.strip()=='':
+                              chunk='\n'.join(buf).strip()
+                              if 'app.include_router' in chunk: out.append(chunk)
+                              buf=[]
+                      return out
+                  merged=dedupe(blocks(A)+blocks(B))
+                  if merged: return '\n\n'.join(merged)+'\n'
+              if len(A)<=10 and len(B)<=10:
+                  return '\n'.join(dedupe(A+B))+'\n'
+              return None
+          for p in pathlib.Path('.').rglob('*.py'):
+              t = p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  def repl(m):
+                      r = merge(m.group(1), m.group(2))
+                      return m.group(0) if r is None else r
+                  new = CONFLICT.sub(repl, t)
+                  if new != t:
+                      p.write_text(new); sh(f"git add {p}")
+          PY
+
+      - name: Continue rebase if possible
+        run: git -c core.editor=true rebase --continue || true
+
+      - name: Check remaining conflicts
+        id: conf
+        run: |
+          git ls-files -u | cut -f2 | sort -u > /tmp/conflicts || true
+          cat /tmp/conflicts || true
+          echo "count=$(wc -l < /tmp/conflicts | tr -d ' ')" >> $GITHUB_OUTPUT
+
+      - name: Normalize formatting
+        if: steps.conf.outputs.count == '0'
+        run: |
+          python -m pip install --upgrade pip >/dev/null 2>&1 || true
+          pip install black isort >/dev/null 2>&1 || true
+          isort . || true
+          black . || true
+
+      - name: Commit & push if clean
+        if: steps.conf.outputs.count == '0'
+        run: |
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "auto-rebase on main (+safe conflict resolves)"
+            git push --force-with-lease
+          fi
+
+      - name: Label & comment if conflicts remain
+        if: steps.conf.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: ${{ matrix.pr }}, labels: ['needs-merge-help'] }).catch(()=>{});
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: ${{ matrix.pr }},
+              body: [
+                '⚠️ Auto-rebase hit real merge conflicts:',
+                ...files.map(f=>`- \`${f}\``),
+                '',
+                'I resolved docs/lockfiles/imports/router duplicates automatically.',
+                'Please apply a semantic merge only for these files (post **suggested changes**) and push.'
+              ].join('\n')
+            });
+
+  one-pr:
+    if: github.event_name == 'issue_comment' && contains(github.event.comment.body, '/autofix')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Checkout PR branch
+        run: gh pr checkout ${{ github.event.issue.number }}
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+      - name: Set bot & rerere
+        run: |
+          git config user.name "autorebase-bot"
+          git config user.email "autorebase-bot@users.noreply.github.com"
+          git config rerere.enabled true
+      - name: Rebase
+        run: git fetch origin main && git rebase origin/main || true
+      - name: Autofix (same as batch)
+        run: |
+          python - <<'PY'
+          import re, subprocess, pathlib
+          def sh(c): subprocess.run(c, shell=True, check=False)
+          # md
+          for p in pathlib.Path('.').rglob('*.md'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  import re; t=re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n','',t,flags=re.M)
+                  p.write_text(t); sh(f"git add {p}")
+          # locks
+          for n in ['package-lock.json','yarn.lock','pnpm-lock.yaml','poetry.lock']:
+              import pathlib; p=pathlib.Path(n)
+              if p.exists(): sh(f"git checkout --ours {n} && git add {n}")
+          # python (imports/routers)
+          CONFLICT = re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
+          def dedupe(xs): out=[]; s=set(); [out.append(x) for x in xs if not (x in s or s.add(x))]; return out
+          def merge(a,b):
+              A=[l.rstrip() for l in a.strip().splitlines()]
+              B=[l.rstrip() for l in b.strip().splitlines()]
+              if ''.join(A)==''.join(B): return '\n'.join(A)+'\n'
+              if all(l.startswith(('import ','from ')) or l=='' for l in A+B):
+                  imp=dedupe([*A,*B]); imp=[l for l in imp if l]; imp.sort(); return '\n'.join(imp)+'\n'
+              if 'app.include_router' in '\n'.join([*A,*B]):
+                  def blocks(L):
+                      buf=[]; out=[]
+                      for l in L+['']:
+                          buf.append(l)
+                          if l.strip().startswith(')') or l.strip()=='':
+                              ch='\n'.join(buf).strip()
+                              if 'app.include_router' in ch: out.append(ch)
+                              buf=[]
+                      return out
+                  m=dedupe(blocks(A)+blocks(B))
+                  if m: return '\n\n'.join(m)+'\n'
+              if len(A)<=10 and len(B)<=10: return '\n'.join(dedupe(A+B))+'\n'
+              return None
+          for p in pathlib.Path('.').rglob('*.py'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  def repl(m): 
+                      r=merge(m.group(1), m.group(2))
+                      return m.group(0) if r is None else r
+                  new=CONFLICT.sub(repl,t)
+                  if new!=t: p.write_text(new); sh(f"git add {p}")
+          PY
+      - name: Continue, check, format, push
+        run: |
+          git -c core.editor=true rebase --continue || true
+          if git ls-files -u | grep . >/dev/null; then
+            echo "conflicts remain"; exit 0
+          fi
+          python -m pip install --upgrade pip >/dev/null 2>&1 || true
+          pip install black isort >/dev/null 2>&1 || true
+          isort . || true
+          black . || true
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "autofix: rebase + safe conflict resolves"
+            git push --force-with-lease
+          fi
