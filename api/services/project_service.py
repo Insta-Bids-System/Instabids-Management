@@ -20,11 +20,13 @@ from ..models.user import User
 from .supabase import supabase_service
 
 
-class ProjectService:
+cclass ProjectService:
     """Encapsulates project specific data access and validation logic."""
 
     def __init__(self, supabase: Optional[Client] = None) -> None:
+        """Create a ProjectService instance backed by a Supabase client."""
         self.supabase = supabase or supabase_service.client
+
 
     async def create_project(self, payload: ProjectCreate, current_user: User) -> Project:
         """Create a new project after verifying permissions and inputs."""
