@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from .config import settings
-from .routers import auth, properties
+from .routers import auth, properties, projects
 from .services.supabase import supabase_service
 from .middleware.rate_limit import rate_limit_middleware
 
@@ -65,6 +65,12 @@ app.include_router(
     properties.router,
     prefix="/api",
     tags=["Properties"]
+)
+
+app.include_router(
+    projects.router,
+    prefix="/api",
+    tags=["Projects"]
 )
 
 # Health check endpoint

@@ -47,10 +47,10 @@ Status: 80% Complete
 Spec: COMPLETED ✅
 Plan: COMPLETED ✅
 Tasks: COMPLETED ✅ (96 tasks)
-Backend: NOT STARTED
-Frontend: NOT STARTED
+Backend: IN PROGRESS (core CRUD foundation in API)
+Frontend: IN PROGRESS (multi-step wizard scaffolding live in Next.js)
 Database: NOT STARTED
-Status: 30% Complete (Planning Done)
+Status: 45% Complete (Backend + frontend scaffolding underway)
 ```
 
 **Contractor Onboarding** 
@@ -109,6 +109,7 @@ Status: 25% Complete (Planning Done)
 
 ### 🔄 In Progress Now
 - Implementing project creation backend API endpoints
+- Building project creation wizard interface
 - Building contractor onboarding frontend components
 - Setting up SmartScope AI integration
 
@@ -121,6 +122,12 @@ Status: 25% Complete (Planning Done)
 - Set up project documentation
 - Created spec-kit commands
 - Organized vision into actionable features
+
+#### 2025-01-18
+- Implemented project creation backend foundation (Pydantic models, Supabase service, CRUD endpoints)
+- Wired new projects router into FastAPI app
+- Updated progress tracker to reflect backend work in progress
+- Started Next.js multi-step wizard for project creation with validation, media management, and review flow
 
 ---
 
