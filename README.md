@@ -13,23 +13,40 @@ InstaBids Management revolutionizes property maintenance by creating a frictionl
 
 ## 🏗️ Tech Stack
 
-- **Frontend**: Next.js 14 (Web) + React Native (Mobile)
-- **Backend**: FastAPI (Python)
-- **Database**: Supabase (PostgreSQL)
-- **AI**: OpenAI GPT-4 Vision
-- **Storage**: AWS S3
+- **Web App**: Next.js 14 + TypeScript + Tailwind CSS
+- **Mobile App**: React Native + Expo SDK 53 + TypeScript
+- **Backend**: FastAPI (Python) + Pydantic v2
+- **Database**: Supabase (PostgreSQL) + Row Level Security
+- **AI**: OpenAI GPT-4 Vision for SmartScope™
+- **Shared Logic**: Zod schemas + TypeScript interfaces
+- **Storage**: AWS S3 + CloudFront CDN
 
 ## 📁 Project Structure
 
 ```
 InstaBids-Management/
 ├── docs/                 # Documentation
-├── web/                  # Next.js web app
-├── mobile/              # React Native app
-├── api/                 # FastAPI backend
-├── migrations/          # Database migrations
-└── specs/              # Feature specifications
+├── web/                  # Next.js web application
+│   └── src/components/  # Web-specific UI components
+├── mobile/              # React Native Expo app
+│   └── src/            # Mobile-specific UI components
+├── packages/shared/     # Shared logic between platforms
+│   ├── types/          # TypeScript interfaces
+│   ├── schemas/        # Zod validation schemas
+│   └── api/            # API client functions
+├── api/                # FastAPI backend
+├── migrations/         # Database migrations
+├── specs/             # Feature specifications
+└── UI_DEVELOPMENT_GUIDE.md # UI consistency rules
 ```
+
+## 🎨 UI Development Approach
+
+We build UI components for **BOTH web and mobile in parallel**:
+- Shared business logic in `packages/shared/`
+- Separate UI implementations for optimal platform experience
+- Consistent functionality across all platforms
+- See [UI_DEVELOPMENT_GUIDE.md](UI_DEVELOPMENT_GUIDE.md) for patterns
 
 ## 🚀 Getting Started
 
