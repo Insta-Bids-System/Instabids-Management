@@ -2,12 +2,14 @@ name: Auto-rebase PRs and autofix trivial conflicts
 
 on:
   push:
-    branches: [ main ]               # run whenever main moves
+    branches: [ main ]                 # run whenever main moves
+  pull_request:                        # run when PRs open/update/reopen
+    types: [opened, synchronize, reopened]
   schedule:
-    - cron: "*/20 * * * *"           # keep PRs fresh
+    - cron: "*/20 * * * *"             # keep PRs fresh even if main is quiet
   issue_comment:
-    types: [created]                 # comment /autofix on a PR to run it
-  workflow_dispatch: {}
+    types: [created]                   # comment /autofix on a PR to run it
+  workflow_dispatch: {}                # allow manual runs from Actions tab
 
 permissions:
   contents: write
@@ -27,7 +29,9 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo  = context.repo.repo;
-            const all = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+            const all = await github.paginate(
+              github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 }
+            );
             // Only PRs whose head branch is in THIS repo (token can push there)
             const target = all
               .filter(pr => pr.base.ref === 'main' && pr.head.repo.full_name === `${owner}/${repo}`)
@@ -81,14 +85,17 @@ jobs:
           def dedupe(xs):
               out=[]; seen=set()
               for x in xs:
-                  if x not in seen: out.append(x); seen.add(x)
+                  if x not in seen:
+                      out.append(x); seen.add(x)
               return out
           def merge(a,b):
               A=[l.rstrip() for l in a.strip().splitlines()]
               B=[l.rstrip() for l in b.strip().splitlines()]
-              if ''.join(A)==''.join(B): return '\n'.join(A)+'\n'
+              if ''.join(A)==''.join(B):
+                  return '\n'.join(A)+'\n'
               if all(l.startswith(('import ','from ')) or l=='' for l in A+B):
-                  imp=dedupe([*A,*B]); imp=[l for l in imp if l]; imp.sort(); return '\n'.join(imp)+'\n'
+                  imp=dedupe([*A,*B]); imp=[l for l in imp if l]; imp.sort()
+                  return '\n'.join(imp)+'\n'
               if 'app.include_router' in '\n'.join([*A,*B]):
                   def blocks(L):
                       buf=[]; out=[]
@@ -101,7 +108,8 @@ jobs:
                       return out
                   m=dedupe(blocks(A)+blocks(B))
                   if m: return '\n\n'.join(m)+'\n'
-              if len(A)<=10 and len(B)<=10: return '\n'.join(dedupe(A+B))+'\n'
+              if len(A)<=10 and len(B)<=10:
+                  return '\n'.join(dedupe(A+B))+'\n'
               return None
           for p in pathlib.Path('.').rglob('*.py'):
               t=p.read_text(errors='ignore')
@@ -110,7 +118,8 @@ jobs:
                       r=merge(m.group(1), m.group(2))
                       return m.group(0) if r is None else r
                   new=CON.sub(repl,t)
-                  if new!=t: p.write_text(new); sh(f"git add {p}")
+                  if new!=t:
+                      p.write_text(new); sh(f"git add {p}")
           PY
 
       - name: Continue rebase if possible
@@ -138,7 +147,6 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "auto-rebase on main (+safe conflict resolves)"
           fi
-          # Push back to the PR head branch in THIS repo
           git push --force-with-lease origin HEAD:${{ matrix.pr.ref }}
 
       - name: Comment if conflicts remain
@@ -148,8 +156,10 @@ jobs:
           script: |
             const fs = require('fs');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
-            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: ${{ matrix.pr.number }}, labels: ['needs-merge-help'] }).catch(()=>{});
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: ${{ matrix.pr.number }}, labels: ['needs-merge-help']
+            }).catch(()=>{});
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: ${{ matrix.pr.number }},
               body: [
@@ -161,28 +171,137 @@ jobs:
             });
 
   one-pr:
-    if: github.event_name == 'issue_comment' && contains(github.event.comment.body, '/autofix')
+    if: github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body, '/autofix')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: actions/github-script@v7
+
+      - name: Get PR info
         id: pr
+        uses: actions/github-script@v7
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner, repo: context.repo.repo, pull_number: context.payload.issue.number
+              owner: context.repo.owner, repo: context.repo.repo,
+              pull_number: context.payload.issue.number
             });
+            core.setOutput('number', pr.number);
             core.setOutput('ref', pr.head.ref);
-      - run: |
+
+      - name: Configure bot & fetch
+        run: |
           git config user.name  "autorebase-bot"
           git config user.email "autorebase-bot@users.noreply.github.com"
           git config rerere.enabled true
           git fetch origin "${{ steps.pr.outputs.ref }}"
           git checkout "${{ steps.pr.outputs.ref }}"
           git fetch origin main
-          git rebase origin/main || true
-      - name: Autofix + continue + push (same logic)
+
+      - name: Rebase
+        run: git rebase origin/main || true
+
+      - name: Autofix common conflicts (same logic)
         run: |
-          # (reuse same Python + steps as above; omitted here for brevity)
-          echo "Use same autofix/check/format/push sequence here"
+          python - <<'PY'
+          import re, subprocess, pathlib
+          sh=lambda c: subprocess.run(c, shell=True, check=False)
+          for p in pathlib.Path('.').rglob('*.md'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  t=re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n','',t,flags=re.M)
+                  p.write_text(t); sh(f"git add {p}")
+          for n in ['package-lock.json','yarn.lock','pnpm-lock.yaml','poetry.lock']:
+              p=pathlib.Path(n)
+              if p.exists(): sh(f"git checkout --ours {n} && git add {n}")
+          CON=re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
+          def dedupe(xs):
+              out=[]; seen=set()
+              for x in xs:
+                  if x not in seen:
+                      out.append(x); seen.add(x)
+              return out
+          def merge(a,b):
+              A=[l.rstrip() for l in a.strip().splitlines()]
+              B=[l.rstrip() for l in b.strip().splitlines()]
+              if ''.join(A)==''.join(B):
+                  return '\n'.join(A)+'\n'
+              if all(l.startswith(('import ','from ')) or l=='' for l in A+B):
+                  imp=dedupe([*A,*B]); imp=[l for l in imp if l]; imp.sort()
+                  return '\n'.join(imp)+'\n'
+              if 'app.include_router' in '\n'.join([*A,*B]):
+                  def blocks(L):
+                      buf=[]; out=[]
+                      for l in L+['']:
+                          buf.append(l)
+                          if l.strip().startswith(')') or l.strip()=='':
+                              ch='\n'.join(buf).strip()
+                              if 'app.include_router' in ch: out.append(ch)
+                              buf=[]
+                      return out
+                  m=dedupe(blocks(A)+blocks(B))
+                  if m: return '\n\n'.join(m)+'\n'
+              if len(A)<=10 and len(B)<=10:
+                  return '\n'.join(dedupe(A+B))+'\n'
+              return None
+          for p in pathlib.Path('.').rglob('*.py'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  def repl(m):
+                      r=merge(m.group(1), m.group(2))
+                      return m.group(0) if r is None else r
+                  new=CON.sub(repl,t)
+                  if new!=t:
+                      p.write_text(new); sh(f"git add {p}")
+          PY
+
+      - name: Continue rebase if possible
+        run: git -c core.editor=true rebase --continue || true
+
+      - name: Check remaining conflicts
+        id: conf
+        run: |
+          git ls-files -u | cut -f2 | sort -u > /tmp/conflicts || true
+          cat /tmp/conflicts || true
+          echo "count=$(wc -l < /tmp/conflicts | tr -d ' ')" >> $GITHUB_OUTPUT
+
+      - name: Format (normalize diffs)
+        if: steps.conf.outputs.count == '0'
+        run: |
+          python -m pip install --upgrade pip >/dev/null 2>&1 || true
+          pip install black isort >/dev/null 2>&1 || true
+          isort . || true
+          black . || true
+          git add -A
+
+      - name: Commit & push if clean
+        if: steps.conf.outputs.count == '0'
+        run: |
+          if ! git diff --cached --quiet; then
+            git commit -m "autofix: rebase + safe conflict resolves"
+          fi
+          git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
+
+      - name: Comment if conflicts remain
+        if: steps.conf.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number("${{ steps.pr.outputs.number }}"), labels: ['needs-merge-help']
+            }).catch(()=>{});
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number("${{ steps.pr.outputs.number }}"),
+              body: [
+                '⚠️ Auto-rebase (manual) hit real merge conflicts:',
+                ...files.map(f=>`- \`${f}\``),
+                '',
+                'I already resolved docs/lockfiles/imports/router duplicates. Please post suggested changes only for these files.'
+              ].join('\n')
+            })
