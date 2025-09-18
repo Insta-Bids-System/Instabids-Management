@@ -2,14 +2,14 @@ name: Auto-rebase PRs and autofix trivial conflicts
 
 on:
   push:
-    branches: [ main ]                 # run when main moves
-  pull_request:                        # run when PRs open/update/reopen
+    branches: [ main ]
+  pull_request:
     types: [opened, synchronize, reopened]
   schedule:
-    - cron: "*/20 * * * *"             # keep PRs fresh
+    - cron: "*/20 * * * *"
   issue_comment:
-    types: [created]                   # comment /autofix on a PR to run it
-  workflow_dispatch: {}                # manual run from Actions tab
+    types: [created]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -40,7 +40,6 @@ jobs:
             const all = await github.paginate(
               github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 }
             );
-            // Only PRs whose head branch is in THIS repo (token can push there)
             const target = all
               .filter(pr => pr.base.ref === 'main' && pr.head.repo.full_name === `${owner}/${repo}`)
               .map(pr => ({ number: pr.number, ref: pr.head.ref, repo: pr.head.repo.full_name }));
@@ -74,7 +73,7 @@ jobs:
       - name: Rebase onto latest main (continue on conflicts)
         run: git rebase upstream/main || true
 
-      - name: Autofix common conflicts (md/lockfiles + python imports/routers)
+      - name: Autofix common conflicts
         run: |
           python - <<'PY'
           import re, subprocess, pathlib
@@ -158,7 +157,7 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ matrix.pr.ref }}
 
-      - name: Generate detailed conflict report & ping Codex
+      - name: Generate per-file conflict comments with full hunks
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         env:
@@ -167,65 +166,96 @@ jobs:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const fs = require('fs');
-            const { execSync } = require('child_process');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const prnum = Number(process.env.PR_NUMBER);
             
-            // Extract detailed conflict content
-            let conflictDetails = [];
+            await github.rest.issues.addLabels({ 
+              owner, repo, issue_number: prnum, 
+              labels: ['codex','needs-merge-help','auto-conflict'] 
+            }).catch(()=>{});
+            
+            // Post one comment per conflicted file with full hunks
             for (const file of files) {
               try {
                 const content = fs.readFileSync(file, 'utf8');
-                const regex = /<<<<<<<[^\n]*\n(.*?)\n=======\n(.*?)\n>>>>>>>[^\n]*\n/gs;
-                let match;
-                let conflictIndex = 0;
+                const lines = content.split('\n');
+                let conflictBlocks = [];
+                let inConflict = false;
+                let currentBlock = [];
+                let contextSize = 10;
                 
-                while ((match = regex.exec(content)) && conflictIndex < 3) {
-                  const ours = (match[1] || '').trim();
-                  const theirs = (match[2] || '').trim();
-                  
-                  const diffBlock = [
-                    '```diff',
-                    '--- ours',
-                    ours || '(empty)',
-                    '+++ theirs', 
-                    theirs || '(empty)',
-                    '```'
-                  ].join('\n');
-                  
-                  conflictDetails.push(`**${file}** (conflict ${conflictIndex + 1}):\n${diffBlock}`);
-                  conflictIndex++;
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (line.startsWith('<<<<<<<')) {
+                    inConflict = true;
+                    const start = Math.max(0, i - contextSize);
+                    const beforeContext = lines.slice(start, i);
+                    currentBlock = [...beforeContext, line];
+                  } else if (line.startsWith('>>>>>>>') && inConflict) {
+                    currentBlock.push(line);
+                    const end = Math.min(lines.length, i + contextSize + 1);
+                    const afterContext = lines.slice(i + 1, end);
+                    currentBlock.push(...afterContext);
+                    conflictBlocks.push(currentBlock.join('\n'));
+                    currentBlock = [];
+                    inConflict = false;
+                  } else if (inConflict) {
+                    currentBlock.push(line);
+                  }
+                }
+                
+                const header = `## 🔧 Conflict in: \`${file}\`\n\n${process.env.CODEX_HANDLE} - This file has merge conflicts that need resolution.\n\n`;
+                
+                if (conflictBlocks.length === 0) {
+                  const body = header + 
+                    '```\n' + content.slice(0, 50000) + '\n```\n\n' +
+                    '**Instructions:** Reply with a ```resolved:' + file + '``` code fence containing the fully resolved file.';
+                  await github.rest.issues.createComment({ 
+                    owner, repo, issue_number: prnum, body 
+                  });
+                } else {
+                  for (let i = 0; i < conflictBlocks.length; i++) {
+                    const isLast = i === conflictBlocks.length - 1;
+                    let body = '';
+                    if (i === 0) body = header;
+                    body += `### Conflict ${i + 1} of ${conflictBlocks.length}\n\n` +
+                            '```diff\n' + conflictBlocks[i] + '\n```\n\n';
+                    if (isLast) {
+                      body += '**Instructions:** Reply with a ```resolved:' + file + 
+                              '``` code fence containing the fully resolved file with all conflicts merged correctly.';
+                    }
+                    if (body.length < 60000) {
+                      await github.rest.issues.createComment({ 
+                        owner, repo, issue_number: prnum, body 
+                      });
+                    } else {
+                      const truncated = body.slice(0, 59000) + '\n\n[Truncated due to size]';
+                      await github.rest.issues.createComment({ 
+                        owner, repo, issue_number: prnum, body: truncated 
+                      });
+                    }
+                  }
                 }
               } catch (e) {
-                conflictDetails.push(`**${file}**: Could not read conflict details`);
+                const body = `## 🔧 Conflict in: \`${file}\`\n\n` +
+                            `Could not read file content: ${e.message}\n\n` +
+                            `${process.env.CODEX_HANDLE} - Please manually check this file.`;
+                await github.rest.issues.createComment({ 
+                  owner, repo, issue_number: prnum, body 
+                });
               }
             }
             
-            const body = [
-              '⚠️ Auto-rebase hit merge conflicts in the following files:',
-              ...files.map(f => `- \`${f}\``),
-              '',
-              '## Conflict Details',
-              ...conflictDetails,
-              '',
-              `${process.env.CODEX_HANDLE} please review these conflicts and provide GitHub *Suggested changes* to resolve them. The conflict details above show the exact differences that need to be merged.`
-            ].join('\n');
-            
-            await github.rest.issues.addLabels({ 
-              owner, repo, issue_number: prnum, 
-              labels: ['codex','needs-merge-help'] 
-            }).catch(()=>{});
-            
+            const summary = `## 📋 Conflict Resolution Summary\n\n` +
+                          `Found ${files.length} file(s) with merge conflicts.\n\n` +
+                          `${process.env.CODEX_HANDLE} - Please review the conflicts above and provide ` +
+                          `\`\`\`resolved:<path>\`\`\` code fences for each file to resolve them.\n\n` +
+                          `The apply-ai-patches workflow will automatically apply your fixes.`;
             await github.rest.issues.createComment({ 
-              owner, repo, issue_number: prnum, body 
+              owner, repo, issue_number: prnum, body: summary 
             });
-            
-            await github.rest.pulls.requestReviewers({
-              owner, repo, pull_number: prnum,
-              reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});
 
   one-pr:
     if: github.event_name == 'issue_comment' &&
@@ -263,7 +293,7 @@ jobs:
       - name: Rebase
         run: git rebase origin/main || true
 
-      - name: Autofix common conflicts (same logic)
+      - name: Autofix common conflicts (same as above)
         run: |
           python - <<'PY'
           import re, subprocess, pathlib
@@ -344,7 +374,7 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
 
-      - name: Comment detailed conflicts & ping Codex (manual path)
+      - name: Post per-file conflicts (manual path)
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         env:
@@ -358,56 +388,87 @@ jobs:
             const repo = context.repo.repo;
             const prnum = Number(process.env.PR_NUMBER);
             
-            // Extract detailed conflict content
-            let conflictDetails = [];
+            await github.rest.issues.addLabels({ 
+              owner, repo, issue_number: prnum, 
+              labels: ['codex','needs-merge-help','auto-conflict'] 
+            }).catch(()=>{});
+            
             for (const file of files) {
               try {
                 const content = fs.readFileSync(file, 'utf8');
-                const regex = /<<<<<<<[^\n]*\n(.*?)\n=======\n(.*?)\n>>>>>>>[^\n]*\n/gs;
-                let match;
-                let conflictIndex = 0;
+                const lines = content.split('\n');
+                let conflictBlocks = [];
+                let inConflict = false;
+                let currentBlock = [];
+                let contextSize = 10;
                 
-                while ((match = regex.exec(content)) && conflictIndex < 3) {
-                  const ours = (match[1] || '').trim();
-                  const theirs = (match[2] || '').trim();
-                  
-                  const diffBlock = [
-                    '```diff',
-                    '--- ours',
-                    ours || '(empty)',
-                    '+++ theirs', 
-                    theirs || '(empty)',
-                    '```'
-                  ].join('\n');
-                  
-                  conflictDetails.push(`**${file}** (conflict ${conflictIndex + 1}):\n${diffBlock}`);
-                  conflictIndex++;
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (line.startsWith('<<<<<<<')) {
+                    inConflict = true;
+                    const start = Math.max(0, i - contextSize);
+                    const beforeContext = lines.slice(start, i);
+                    currentBlock = [...beforeContext, line];
+                  } else if (line.startsWith('>>>>>>>') && inConflict) {
+                    currentBlock.push(line);
+                    const end = Math.min(lines.length, i + contextSize + 1);
+                    const afterContext = lines.slice(i + 1, end);
+                    currentBlock.push(...afterContext);
+                    conflictBlocks.push(currentBlock.join('\n'));
+                    currentBlock = [];
+                    inConflict = false;
+                  } else if (inConflict) {
+                    currentBlock.push(line);
+                  }
+                }
+                
+                const header = `## 🔧 Conflict in: \`${file}\`\n\n${process.env.CODEX_HANDLE} - This file has merge conflicts that need resolution.\n\n`;
+                
+                if (conflictBlocks.length === 0) {
+                  const body = header + 
+                    '```\n' + content.slice(0, 50000) + '\n```\n\n' +
+                    '**Instructions:** Reply with a ```resolved:' + file + '``` code fence containing the fully resolved file.';
+                  await github.rest.issues.createComment({ 
+                    owner, repo, issue_number: prnum, body 
+                  });
+                } else {
+                  for (let i = 0; i < conflictBlocks.length; i++) {
+                    const isLast = i === conflictBlocks.length - 1;
+                    let body = '';
+                    if (i === 0) body = header;
+                    body += `### Conflict ${i + 1} of ${conflictBlocks.length}\n\n` +
+                            '```diff\n' + conflictBlocks[i] + '\n```\n\n';
+                    if (isLast) {
+                      body += '**Instructions:** Reply with a ```resolved:' + file + 
+                              '``` code fence containing the fully resolved file with all conflicts merged correctly.';
+                    }
+                    if (body.length < 60000) {
+                      await github.rest.issues.createComment({ 
+                        owner, repo, issue_number: prnum, body 
+                      });
+                    } else {
+                      const truncated = body.slice(0, 59000) + '\n\n[Truncated due to size]';
+                      await github.rest.issues.createComment({ 
+                        owner, repo, issue_number: prnum, body: truncated 
+                      });
+                    }
+                  }
                 }
               } catch (e) {
-                conflictDetails.push(`**${file}**: Could not read conflict details`);
+                const body = `## 🔧 Conflict in: \`${file}\`\n\n` +
+                            `Could not read file content: ${e.message}\n\n` +
+                            `${process.env.CODEX_HANDLE} - Please manually check this file.`;
+                await github.rest.issues.createComment({ 
+                  owner, repo, issue_number: prnum, body 
+                });
               }
             }
             
-            const body = [
-              '⚠️ Auto-rebase (manual) hit merge conflicts in the following files:',
-              ...files.map(f => `- \`${f}\``),
-              '',
-              '## Conflict Details',
-              ...conflictDetails,
-              '',
-              `${process.env.CODEX_HANDLE} please review these conflicts and provide GitHub *Suggested changes* to resolve them. The conflict details above show the exact differences that need to be merged.`
-            ].join('\n');
-            
-            await github.rest.issues.addLabels({ 
-              owner, repo, issue_number: prnum, 
-              labels: ['codex','needs-merge-help'] 
-            }).catch(()=>{});
-            
+            const summary = `## 📋 Conflict Resolution Summary\n\n` +
+                          `Found ${files.length} file(s) with merge conflicts.\n\n` +
+                          `${process.env.CODEX_HANDLE} - Please review the conflicts above and provide ` +
+                          `\`\`\`resolved:<path>\`\`\` code fences for each file to resolve them.\n\n` +
+                          `The apply-ai-patches workflow will automatically apply your fixes.`;
             await github.rest.issues.createComment({ 
-              owner, repo, issue_number: prnum, body 
+              owner, repo, issue_number: prnum, body: summary 
             });
-            
-            await github.rest.pulls.requestReviewers({
-              owner, repo, pull_number: prnum,
-              reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});
