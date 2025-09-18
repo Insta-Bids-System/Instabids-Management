@@ -33,6 +33,7 @@ jobs:
       - id: out
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo  = context.repo.repo;
@@ -60,6 +61,7 @@ jobs:
           repository: ${{ matrix.pr.repo }}
           ref: ${{ matrix.pr.ref }}
           fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Bot identity & rerere
         run: |
@@ -156,30 +158,74 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ matrix.pr.ref }}
 
-      - name: Generate conflict report & ping Codex
+      - name: Generate detailed conflict report & ping Codex
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ matrix.pr.number }}
         with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const fs = require('fs');
+            const { execSync } = require('child_process');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
             const owner = context.repo.owner;
-            const repo  = context.repo.repo;
+            const repo = context.repo.repo;
             const prnum = Number(process.env.PR_NUMBER);
+            
+            // Extract detailed conflict content
+            let conflictDetails = [];
+            for (const file of files) {
+              try {
+                const content = fs.readFileSync(file, 'utf8');
+                const regex = /<<<<<<<[^\n]*\n(.*?)\n=======\n(.*?)\n>>>>>>>[^\n]*\n/gs;
+                let match;
+                let conflictIndex = 0;
+                
+                while ((match = regex.exec(content)) && conflictIndex < 3) {
+                  const ours = (match[1] || '').trim();
+                  const theirs = (match[2] || '').trim();
+                  
+                  const diffBlock = [
+                    '```diff',
+                    '--- ours',
+                    ours || '(empty)',
+                    '+++ theirs', 
+                    theirs || '(empty)',
+                    '```'
+                  ].join('\n');
+                  
+                  conflictDetails.push(`**${file}** (conflict ${conflictIndex + 1}):\n${diffBlock}`);
+                  conflictIndex++;
+                }
+              } catch (e) {
+                conflictDetails.push(`**${file}**: Could not read conflict details`);
+              }
+            }
+            
             const body = [
-              '⚠️ Auto-rebase hit merge conflicts:',
-              ...files.map(f=>`- \`${f}\``),
+              '⚠️ Auto-rebase hit merge conflicts in the following files:',
+              ...files.map(f => `- \`${f}\``),
               '',
-              `${process.env.CODEX_HANDLE} please fix these by posting GitHub *Suggested changes* only for the files listed above.`
+              '## Conflict Details',
+              ...conflictDetails,
+              '',
+              `${process.env.CODEX_HANDLE} please review these conflicts and provide GitHub *Suggested changes* to resolve them. The conflict details above show the exact differences that need to be merged.`
             ].join('\n');
-            await github.rest.issues.addLabels({ owner, repo, issue_number: prnum, labels: ['codex','needs-merge-help'] }).catch(()=>{});
-            await github.rest.issues.createComment({ owner, repo, issue_number: prnum, body });
+            
+            await github.rest.issues.addLabels({ 
+              owner, repo, issue_number: prnum, 
+              labels: ['codex','needs-merge-help'] 
+            }).catch(()=>{});
+            
+            await github.rest.issues.createComment({ 
+              owner, repo, issue_number: prnum, body 
+            });
+            
             await github.rest.pulls.requestReviewers({
               owner, repo, pull_number: prnum,
               reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});  // fine if the bot can't be a reviewer
+            }).catch(()=>{});
 
   one-pr:
     if: github.event_name == 'issue_comment' &&
@@ -188,12 +234,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: 
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Get PR info
         id: pr
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner, repo: context.repo.repo,
@@ -295,27 +344,70 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
 
-      - name: Comment conflicts & ping Codex (manual path)
+      - name: Comment detailed conflicts & ping Codex (manual path)
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const fs = require('fs');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
             const owner = context.repo.owner;
-            const repo  = context.repo.repo;
+            const repo = context.repo.repo;
             const prnum = Number(process.env.PR_NUMBER);
+            
+            // Extract detailed conflict content
+            let conflictDetails = [];
+            for (const file of files) {
+              try {
+                const content = fs.readFileSync(file, 'utf8');
+                const regex = /<<<<<<<[^\n]*\n(.*?)\n=======\n(.*?)\n>>>>>>>[^\n]*\n/gs;
+                let match;
+                let conflictIndex = 0;
+                
+                while ((match = regex.exec(content)) && conflictIndex < 3) {
+                  const ours = (match[1] || '').trim();
+                  const theirs = (match[2] || '').trim();
+                  
+                  const diffBlock = [
+                    '```diff',
+                    '--- ours',
+                    ours || '(empty)',
+                    '+++ theirs', 
+                    theirs || '(empty)',
+                    '```'
+                  ].join('\n');
+                  
+                  conflictDetails.push(`**${file}** (conflict ${conflictIndex + 1}):\n${diffBlock}`);
+                  conflictIndex++;
+                }
+              } catch (e) {
+                conflictDetails.push(`**${file}**: Could not read conflict details`);
+              }
+            }
+            
             const body = [
-              '⚠️ Auto-rebase (manual) hit merge conflicts:',
-              ...files.map(f=>`- \`${f}\``),
+              '⚠️ Auto-rebase (manual) hit merge conflicts in the following files:',
+              ...files.map(f => `- \`${f}\``),
               '',
-              `${process.env.CODEX_HANDLE} please fix these by posting GitHub *Suggested changes* only for the files listed above.`
+              '## Conflict Details',
+              ...conflictDetails,
+              '',
+              `${process.env.CODEX_HANDLE} please review these conflicts and provide GitHub *Suggested changes* to resolve them. The conflict details above show the exact differences that need to be merged.`
             ].join('\n');
-            await github.rest.issues.addLabels({ owner, repo, issue_number: prnum, labels: ['codex','needs-merge-help'] }).catch(()=>{});
-            await github.rest.issues.createComment({ owner, repo, issue_number: prnum, body });
+            
+            await github.rest.issues.addLabels({ 
+              owner, repo, issue_number: prnum, 
+              labels: ['codex','needs-merge-help'] 
+            }).catch(()=>{});
+            
+            await github.rest.issues.createComment({ 
+              owner, repo, issue_number: prnum, body 
+            });
+            
             await github.rest.pulls.requestReviewers({
               owner, repo, pull_number: prnum,
               reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});  // fine if bot can't be reviewer
+            }).catch(()=>{});
