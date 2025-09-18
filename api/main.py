@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 import logging
-
+from .config import settings
+from .middleware.rate_limit import rate_limit_middleware
+from .routers import auth, properties, projects, smartscope
+from .services.supabase import supabase_service
+from config import settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from config import settings
 from middleware.rate_limit import rate_limit_middleware
 from routers import auth, properties, projects, smartscope
 from services.supabase import supabase_service
@@ -84,10 +86,9 @@ app.include_router(
 app.include_router(
     smartscope.router,
     prefix="/api",
-    tags=["SmartScope AI"],
+tags=["SmartScope AI"],
 )
-
-
+tags=["SmartScope AI"]
 # Health check endpoint
 @app.get("/health")
 async def health_check():

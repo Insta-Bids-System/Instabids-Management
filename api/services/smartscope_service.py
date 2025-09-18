@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from supabase import Client
 
+from ..models.smartscope import (
 from models.smartscope import (
     AccuracyMetrics,
     AnalysisMetadata,
@@ -20,6 +21,10 @@ from models.smartscope import (
     SmartScopeAnalysis,
     SmartScopeAnalysisCreate,
 )
+from ..models.user import User
+from .cost_monitor import CostMonitor
+from .openai_vision import OpenAIVisionService
+from .supabase import supabase_service
 from models.user import User
 from services.cost_monitor import CostMonitor
 from services.openai_vision import OpenAIVisionService
