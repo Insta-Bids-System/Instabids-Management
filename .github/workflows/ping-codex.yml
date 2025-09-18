@@ -1,0 +1,178 @@
+name: Manual ping Codex
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to ping Codex for'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  CODEX_HANDLE: "@chatgpt-codex-connector"
+
+jobs:
+  ping-codex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR info and check for conflicts
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = parseInt('${{ github.event.inputs.pr_number }}');
+            
+            console.log(`Getting info for PR #${prNumber}`);
+            
+            // Get PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber
+            });
+            
+            console.log(`PR: ${pr.title} (${pr.head.ref} -> ${pr.base.ref})`);
+            core.setOutput('pr_title', pr.title);
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('base_ref', pr.base.ref);
+            
+            return { pr_number: prNumber, head_ref: pr.head.ref };
+
+      - name: Check for merge conflicts
+        id: conflicts
+        run: |
+          echo "CHECKING FOR CONFLICTS..."
+          
+          # Fetch the PR branch and try to merge
+          git fetch origin ${{ steps.pr-info.outputs.head_ref }}
+          git fetch origin ${{ steps.pr-info.outputs.base_ref }}
+          
+          # Switch to PR branch
+          git checkout origin/${{ steps.pr-info.outputs.head_ref }}
+          
+          # Try to merge base branch to check for conflicts
+          if git merge origin/${{ steps.pr-info.outputs.base_ref }} --no-commit --no-ff; then
+            echo "No conflicts detected"
+            echo "count=0" >> $GITHUB_OUTPUT
+            git merge --abort 2>/dev/null || true
+          else
+            echo "CONFLICTS DETECTED!"
+            # List conflicted files
+            git ls-files -u | cut -f2 | sort -u > /tmp/conflicts || true
+            cat /tmp/conflicts || true
+            conflict_count=$(wc -l < /tmp/conflicts | tr -d ' ')
+            echo "count=$conflict_count" >> $GITHUB_OUTPUT
+            
+            # Reset state
+            git merge --abort 2>/dev/null || true
+            git reset --hard HEAD 2>/dev/null || true
+          fi
+
+      - name: Ping Codex with conflict info
+        if: steps.conflicts.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = parseInt('${{ github.event.inputs.pr_number }}');
+            
+            console.log("PINGING CODEX...");
+            
+            // Read conflict files
+            let conflictFiles = [];
+            try {
+              const conflictData = fs.readFileSync('/tmp/conflicts', 'utf8').trim();
+              conflictFiles = conflictData.split('\n').filter(Boolean);
+            } catch (e) {
+              console.log("No conflicts file found, using placeholder");
+              conflictFiles = ['(conflicts detected but file list unavailable)'];
+            }
+            
+            const body = [
+              '🤖 **Manual Codex Ping Test**',
+              '',
+              '⚠️ Merge conflicts detected in the following files:',
+              ...conflictFiles.map(f => `- \`${f}\``),
+              '',
+              `${process.env.CODEX_HANDLE} please help resolve these conflicts by reviewing the files and providing suggested changes.`,
+              '',
+              '---',
+              `*This is a manual test ping triggered for PR #${prNumber}*`
+            ].join('\n');
+            
+            // Add codex label
+            try {
+              await github.rest.issues.addLabels({ 
+                owner, repo, 
+                issue_number: prNumber, 
+                labels: ['codex', 'needs-merge-help'] 
+              });
+              console.log("Label added.");
+            } catch (e) {
+              console.log(`Failed to add label: ${e.message}`);
+            }
+            
+            // Post mention comment
+            try {
+              const response = await github.rest.issues.createComment({ 
+                owner, repo, 
+                issue_number: prNumber, 
+                body 
+              });
+              console.log("Mention comment posted.");
+              console.log(`Comment ID: ${response.data.id}`);
+            } catch (e) {
+              console.log(`Failed to post comment: ${e.message}`);
+              throw e;
+            }
+            
+            // Request reviewer (optional, may fail)
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner, repo, 
+                pull_number: prNumber,
+                reviewers: [process.env.CODEX_HANDLE.replace(/^@/, '')]
+              });
+              console.log("Reviewer requested.");
+            } catch (e) {
+              console.log(`Could not request reviewer: ${e.message}`);
+            }
+
+      - name: Report no conflicts
+        if: steps.conflicts.outputs.count == '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = parseInt('${{ github.event.inputs.pr_number }}');
+            
+            const body = [
+              '✅ **Manual Codex Ping Test - No Conflicts**',
+              '',
+              'No merge conflicts detected in this PR.',
+              '',
+              `${process.env.CODEX_HANDLE} - this is a test ping, but no conflicts need resolving.`,
+              '',
+              '---',
+              `*Manual test completed for PR #${prNumber}*`
+            ].join('\n');
+            
+            await github.rest.issues.createComment({ 
+              owner, repo, 
+              issue_number: prNumber, 
+              body 
+            });
+            console.log("No-conflict test comment posted.");
