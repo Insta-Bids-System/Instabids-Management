@@ -2,23 +2,26 @@ name: Auto-rebase PRs and autofix trivial conflicts
 
 on:
   push:
-    branches: [ main ]                 # run whenever main moves
+    branches: [ main ]                 # run when main moves
   pull_request:                        # run when PRs open/update/reopen
     types: [opened, synchronize, reopened]
   schedule:
-    - cron: "*/20 * * * *"             # keep PRs fresh even if main is quiet
+    - cron: "*/20 * * * *"             # keep PRs fresh
   issue_comment:
     types: [created]                   # comment /autofix on a PR to run it
-  workflow_dispatch: {}                # allow manual runs from Actions tab
+  workflow_dispatch: {}                # manual run from Actions tab
 
 permissions:
   contents: write
   pull-requests: write
   issues: write
 
-# Change this if your Codex handle is different
 env:
-  CODEX_HANDLE: "@codex"               # e.g. "@chatgpt-codex-connector[bot]"
+  CODEX_HANDLE: "@chatgpt-codex-connector[bot]"   # <— change if your bot handle differs
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   collect:
@@ -153,45 +156,28 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ matrix.pr.ref }}
 
-      - name: Comment if conflicts remain
+      - name: Generate conflict report & ping Codex
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: ${{ matrix.pr.number }}, labels: ['needs-merge-help']
-            }).catch(()=>{});
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: ${{ matrix.pr.number }},
-              body: [
-                '⚠️ Auto-rebase hit real merge conflicts:',
-                ...files.map(f=>`- \`${f}\``),
-                '',
-                'I already resolved docs/lockfiles/imports/router duplicates. Please post **Suggested changes** only for these files.'
-              ].join('\n')
-            });
-
-      - name: Ping Codex to fix conflicts
-        if: steps.conf.outputs.count != '0'
-        uses: actions/github-script@v7
-        with:
-          script: |
             const owner = context.repo.owner;
             const repo  = context.repo.repo;
             const prnum = ${{ matrix.pr.number }};
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: prnum,
-              body: `${process.env.CODEX_HANDLE} please fix the merge conflicts by posting GitHub *Suggested changes* only for the files listed above.`
-            }).catch(()=>{});
-            await github.rest.issues.addLabels({
-              owner, repo, issue_number: prnum, labels: ['codex']
-            }).catch(()=>{});
+            const body = [
+              '⚠️ Auto-rebase hit merge conflicts:',
+              ...files.map(f=>`- \`${f}\``),
+              '',
+              `${process.env.CODEX_HANDLE} please fix these by posting GitHub *Suggested changes* only for the files listed above.`
+            ].join('\n');
+            await github.rest.issues.addLabels({ owner, repo, issue_number: prnum, labels: ['codex','needs-merge-help'] }).catch(()=>{});
+            await github.rest.issues.createComment({ owner, repo, issue_number: prnum, body });
             await github.rest.pulls.requestReviewers({
-              owner, repo, pull_number: prnum, reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});  // ok if the bot can't be a reviewer
+              owner, repo, pull_number: prnum,
+              reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
+            }).catch(()=>{});  // fine if the bot can't be a reviewer
 
   one-pr:
     if: github.event_name == 'issue_comment' &&
@@ -307,43 +293,26 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
 
-      - name: Comment if conflicts remain
+      - name: Comment conflicts & ping Codex (manual path)
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number("${{ steps.pr.outputs.number }}"), labels: ['needs-merge-help']
-            }).catch(()=>{});
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number("${{ steps.pr.outputs.number }}"),
-              body: [
-                '⚠️ Auto-rebase (manual) hit real merge conflicts:',
-                ...files.map(f=>`- \`${f}\``),
-                '',
-                'I already resolved docs/lockfiles/imports/router duplicates. Please post **Suggested changes** only for these files.'
-              ].join('\n')
-            });
-
-      - name: Ping Codex to fix conflicts (manual path)
-        if: steps.conf.outputs.count != '0'
-        uses: actions/github-script@v7
-        with:
-          script: |
             const owner = context.repo.owner;
             const repo  = context.repo.repo;
             const prnum = Number("${{ steps.pr.outputs.number }}");
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: prnum,
-              body: `${process.env.CODEX_HANDLE} please fix the merge conflicts by posting GitHub *Suggested changes* only for the files listed above.`
-            }).catch(()=>{});
-            await github.rest.issues.addLabels({
-              owner, repo, issue_number: prnum, labels: ['codex']
-            }).catch(()=>{});
+            const body = [
+              '⚠️ Auto-rebase (manual) hit merge conflicts:',
+              ...files.map(f=>`- \`${f}\``),
+              '',
+              `${process.env.CODEX_HANDLE} please fix these by posting GitHub *Suggested changes* only for the files listed above.`
+            ].join('\n');
+            await github.rest.issues.addLabels({ owner, repo, issue_number: prnum, labels: ['codex','needs-merge-help'] }).catch(()=>{});
+            await github.rest.issues.createComment({ owner, repo, issue_number: prnum, body });
             await github.rest.pulls.requestReviewers({
-              owner, repo, pull_number: prnum, reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});
+              owner, repo, pull_number: prnum,
+              reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
+            }).catch(()=>{});  # fine if bot can't be reviewer
+
