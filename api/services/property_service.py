@@ -15,7 +15,7 @@ from ..models.property import (
     PropertyBulkCreate, PropertyImport, PropertyExport,
     PropertyType, PropertyStatus, PropertyCoordinates
 )
-from .supabase import supabase_service
+from api.services.supabase import supabase_service
 
 logger = logging.getLogger(__name__)
 
