@@ -16,10 +16,10 @@ from ..models.property import (
 )
 from supabase import Client
 
-from ..services.property_service import PropertyService
-from ..services.supabase import supabase_service
-from ..dependencies import get_current_user, get_organization_id
-from ..models.user import User
+from api.services.property_service import PropertyService
+from api.services.supabase import supabase_service
+from api.dependencies import get_current_user, get_organization_id
+from api.models.user import User
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
