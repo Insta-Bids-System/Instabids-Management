@@ -1,0 +1,68 @@
+name: Manual ping Codex
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to ping Codex for'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  CODEX_HANDLE: "@chatgpt-codex-connector"
+
+jobs:
+  ping-codex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Simple Codex ping
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = parseInt('${{ github.event.inputs.pr_number }}');
+            
+            console.log('PINGING CODEX...');
+            
+            const body = `🤖 **Manual Codex Ping Test**
+
+            @chatgpt-codex-connector please help review PR #${prNumber} for any merge conflicts or issues that need resolution.
+            
+            *This is a manual test ping to verify the automated system is working.*`;
+            
+            // Add codex label
+            try {
+              await github.rest.issues.addLabels({ 
+                owner, repo, 
+                issue_number: prNumber, 
+                labels: ['codex', 'needs-merge-help'] 
+              });
+              console.log('Label added.');
+            } catch (e) {
+              console.log('Failed to add label:', e.message);
+            }
+            
+            // Post mention comment
+            try {
+              const response = await github.rest.issues.createComment({ 
+                owner, repo, 
+                issue_number: prNumber, 
+                body 
+              });
+              console.log('Mention comment posted.');
+              console.log('Comment ID:', response.data.id);
+            } catch (e) {
+              console.log('Failed to post comment:', e.message);
+              throw e;
+            }
