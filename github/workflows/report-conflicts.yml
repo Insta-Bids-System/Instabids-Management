@@ -1,0 +1,83 @@
+name: Report PR Conflicts
+
+on:
+  issue_comment:
+    types: [created]      # run when you comment /conflicts on a PR
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  report:
+    if: github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'issue_comment' &&
+         github.event.issue.pull_request != null &&
+         contains(github.event.comment.body, '/conflicts'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Get PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo,
+              pull_number: context.payload.issue ? context.payload.issue.number : context.payload.inputs?.number
+            });
+            core.setOutput('ref', pr.head.ref);
+            core.setOutput('number', pr.number);
+
+      - name: Checkout PR head
+        run: |
+          git fetch origin "${{ steps.pr.outputs.ref }}"
+          git checkout "${{ steps.pr.outputs.ref }}"
+          git fetch origin main
+          # Create conflicts in working tree (no commit)
+          git merge --no-commit --no-ff origin/main || true
+
+      - name: Extract & post conflicts
+        id: post
+        run: |
+          python3 - <<'PY' > body.txt
+          import os,subprocess,sys,pathlib,re,textwrap
+          def sh(c): return subprocess.run(c, shell=True, check=False, capture_output=True, text=True)
+          files = sh("git ls-files -u | cut -f2 | sort -u").stdout.strip().splitlines()
+          if not files:
+              print("No conflicts found."); sys.exit(0)
+          out = ["### ⚠️ Merge conflicts detected\n",
+                 "Reply with **Suggested changes** for each block.\n"]
+          pat = re.compile(r"<<<<<<<[^\n]*\n(.*?)\n=======[^\n]*\n(.*?)\n>>>>>>>[^\n]*\n", re.S)
+          for f in files:
+              out.append(f"\n#### `{f}`\n")
+              t = pathlib.Path(f).read_text(errors="ignore")
+              i=0
+              for m in pat.finditer(t):
+                  i+=1
+                  ours, theirs = m.group(1).rstrip(), m.group(2).rstrip()
+                  out.append(f"<details><summary>Conflict {i}</summary>\n\n")
+                  out.append("**OURS**:\n```diff\n"+ours+"\n```\n")
+                  out.append("**THEIRS**:\n```diff\n"+theirs+"\n```\n")
+                  out.append("</details>\n")
+          open('body.md','w').write("\n".join(out))
+          PY
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          cat body.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('body.md','utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number("${{ steps.pr.outputs.number }}"),
+              body
+            });
