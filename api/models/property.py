@@ -153,14 +153,14 @@ class PropertyBulkCreate(BaseModel):
 
 class PropertyImport(BaseModel):
     """Model for property import."""
-    file_type: str = Field(..., regex="^(csv|xlsx)$")
+    file_type: str = Field(..., pattern="^(csv|xlsx)$")
     mapping: Dict[str, str]
     skip_errors: bool = True
     dry_run: bool = False
 
 class PropertyExport(BaseModel):
     """Model for property export."""
-    format: str = Field(..., regex="^(csv|xlsx|json)$")
+    format: str = Field(..., pattern="^(csv|xlsx|json)$")
     filters: Optional[PropertyFilter] = None
     include_deleted: bool = False
 

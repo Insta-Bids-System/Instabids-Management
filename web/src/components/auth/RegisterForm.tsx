@@ -29,7 +29,9 @@ type RegisterFormData = z.infer<typeof registerSchema>
 export default function RegisterForm() {
   const { register: registerUser } = useAuth()
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)  const {
+  const [isLoading, setIsLoading] = useState(false)
+  
+  const {
     register,
     handleSubmit,
     watch,
@@ -50,8 +52,8 @@ export default function RegisterForm() {
     try {
       const { confirmPassword, ...registerData } = data
       await registerUser(registerData)
-    } catch (err: any) {
-      setError(err.message || 'Registration failed')
+    } catch (err) {
+      setError((err as Error).message || 'Registration failed')
     } finally {
       setIsLoading(false)
     }

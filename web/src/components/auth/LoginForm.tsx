@@ -29,10 +29,12 @@ export default function LoginForm() {
 
   async function onSubmit(data: LoginFormData) {
     setError(null)
-    setIsLoading(true)    try {
+    setIsLoading(true)
+    
+    try {
       await login(data)
-    } catch (err: any) {
-      setError(err.message || 'Login failed')
+    } catch (err) {
+      setError((err as Error).message || 'Login failed')
     } finally {
       setIsLoading(false)
     }
@@ -92,7 +94,7 @@ export default function LoginForm() {
         </button>
 
         <p className="text-center text-sm text-gray-600">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
             Sign up
           </Link>

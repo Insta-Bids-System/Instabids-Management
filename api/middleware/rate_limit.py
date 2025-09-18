@@ -71,7 +71,7 @@ async def rate_limit_middleware(request: Request, call_next):
         return await call_next(request)    
     # Check rate limit for auth endpoints
     if request.url.path.startswith("/api/auth"):
-        from ..config import settings
+        from config import settings
         limiter = RateLimiter(
             requests=settings.rate_limit_requests,
             period=settings.rate_limit_period

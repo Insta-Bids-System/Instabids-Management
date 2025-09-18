@@ -14,7 +14,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8)
     user_type: Literal["property_manager", "contractor", "tenant"]
     full_name: str = Field(..., min_length=2, max_length=255)
-    phone: Optional[str] = Field(None, regex=r"^\+?1?\d{9,15}$")
+    phone: Optional[str] = Field(None, pattern=r"^\+?1?\d{9,15}$")
     organization_name: Optional[str] = None
     
     @validator('password')
@@ -33,7 +33,9 @@ class RegisterRequest(BaseModel):
     def validate_organization(cls, v, values):
         if values.get('user_type') == 'property_manager' and not v:
             raise ValueError('Organization name required for property managers')
-        return vclass LoginRequest(BaseModel):
+        return v
+
+class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
@@ -68,7 +70,9 @@ class UserResponse(BaseModel):
     organization_id: Optional[str]
     email_verified: bool
     phone_verified: bool
-    created_at: datetimeclass AuthResponse(BaseModel):
+    created_at: datetime
+
+class AuthResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "Bearer"

@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 import io
 import csv
 
-from ..models.property import (
+from models.property import (
     Property, PropertyCreate, PropertyUpdate, PropertyFilter,
     PropertyListResponse, PropertyBulkCreate, PropertyBulkResponse,
     PropertyGroup, PropertyGroupCreate, PropertyGroupUpdate,
@@ -16,10 +16,10 @@ from ..models.property import (
 )
 from supabase import Client
 
-from api.services.property_service import PropertyService
-from api.services.supabase import supabase_service
-from api.dependencies import get_current_user, get_organization_id
-from api.models.user import User
+from services.property_service import PropertyService
+from services.supabase import supabase_service
+from dependencies import get_current_user, get_organization_id
+from models.user import User
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
@@ -283,7 +283,7 @@ async def import_properties(
 
 @router.get("/export", response_class=StreamingResponse)
 async def export_properties(
-    format: str = Query('csv', regex='^(csv|json)$'),
+    format: str = Query('csv', pattern='^(csv|json)$'),
     include_deleted: bool = Query(False),
     current_user: User = Depends(get_current_user),
     service: PropertyService = Depends(lambda: PropertyService())
