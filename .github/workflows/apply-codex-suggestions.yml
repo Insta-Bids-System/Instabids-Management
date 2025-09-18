@@ -1,0 +1,86 @@
+name: Apply Codex suggestions
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  apply:
+    # Trigger either when you say "@codex fix comments" OR when the Codex bot submits a review
+    if: >
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '@codex fix comments')) ||
+      (github.event_name == 'pull_request_review' &&
+       github.actor == 'chatgpt-codex-connector[bot]' &&
+       (github.event.review.state == 'commented' || github.event.review.state == 'changes_requested'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Resolve target PR
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const n = context.eventName==='issue_comment'
+              ? context.payload.issue.number
+              : context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: n
+            });
+            core.setOutput('number', String(n));
+            core.setOutput('ref', pr.head.ref);
+
+      - name: Checkout PR head
+        run: |
+          git fetch origin "${{ steps.pr.outputs.ref }}"
+          git checkout "${{ steps.pr.outputs.ref }}"
+
+      - name: Apply Codex "```suggestion" patches
+        id: apply
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const prnum = Number('${{ steps.pr.outputs.number }}');
+            const comments = await github.paginate(
+              github.rest.pulls.listReviewComments,
+              { owner, repo, pull_number: prnum, per_page: 100 }
+            );
+            const targets = comments.filter(c =>
+              c.user?.login === 'chatgpt-codex-connector[bot]' &&
+              /```suggestion/i.test(c.body||'')
+            );
+            let changed = 0;
+            for (const c of targets) {
+              const m = (c.body||'').match(/```suggestion\s*\n([\s\S]*?)```/i);
+              if (!m) continue;
+              const patch = m[1].replace(/\r\n/g,'\n');
+              const p = c.path, end = c.line || c.original_line, start = c.start_line || c.original_start_line || end;
+              if (!p || !end || !fs.existsSync(p)) continue;
+              const lines = fs.readFileSync(p,'utf8').replace(/\r\n/g,'\n').split('\n');
+              const s = Math.max(0, start-1), e = Math.max(0, end-1);
+              if (s>lines.length || e>lines.length || s>e) continue;
+              const repl = patch.replace(/\n$/,'').split('\n');
+              lines.splice(s, e-s+1, ...repl);
+              fs.writeFileSync(p, lines.join('\n'));
+              changed++;
+            }
+            core.setOutput('changed', String(changed));
+
+      - name: Commit & push if changed
+        if: steps.apply.outputs.changed != '0'
+        run: |
+          git config user.name  "codex-auto-apply"
+          git config user.email "codex-auto-apply@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply Codex suggested changes"
+          git push --force-with-lease origin "${{ steps.pr.outputs.ref }}"
