@@ -66,15 +66,14 @@ async def register(request: RegisterRequest):
     try:
         # Create organization if property manager
         org_id = None
-        # Temporarily disabled organization creation
-        # if request.user_type == "property_manager" and request.organization_name:
-        #     org_response = supabase_service.client.table("organizations").insert({
-        #         "name": request.organization_name,
-        #         "type": "property_management"
-        #     }).execute()
-        #     
-        #     if org_response.data:
-        #         org_id = org_response.data[0]["id"]
+        if request.user_type == "property_manager" and request.organization_name:
+            org_response = supabase_service.client.table("organizations").insert({
+                "name": request.organization_name,
+                "type": "property_management"
+            }).execute()
+            
+            if org_response.data:
+                org_id = org_response.data[0]["id"]
         
         # Create user with Supabase Auth
         user_metadata = {
@@ -97,16 +96,16 @@ async def register(request: RegisterRequest):
         
         auth_user = auth_response.user
         
-        # Temporarily disabled user profile creation
-        # profile_response = supabase_service.client.table("user_profiles").insert({
-        #     "id": auth_user.id,
-        #     "email": request.email,
-        #     "full_name": request.full_name,
-        #     "user_type": request.user_type,
-        #     "phone": request.phone,
-        #     "organization_id": org_id,
-        #     "profile_data": {}
-        # }).execute()        
+        # Create user profile
+        profile_response = supabase_service.client.table("user_profiles").insert({
+            "id": auth_user.id,
+            "email": request.email,
+            "full_name": request.full_name,
+            "user_type": request.user_type,
+            "phone": request.phone,
+            "organization_id": org_id,
+            "profile_data": {}
+        }).execute()
         return RegisterResponse(
             user_id=auth_user.id,
             email=request.email,
