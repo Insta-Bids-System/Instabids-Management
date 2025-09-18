@@ -48,9 +48,9 @@ Spec: COMPLETED ✅
 Plan: COMPLETED ✅
 Tasks: COMPLETED ✅ (96 tasks)
 Backend: IN PROGRESS (core CRUD foundation in API)
-Frontend: NOT STARTED
+Frontend: IN PROGRESS (multi-step wizard scaffolding live in Next.js)
 Database: NOT STARTED
-Status: 35% Complete (Backend foundation underway)
+Status: 45% Complete (Backend foundation + wizard scaffolding underway)
 ```
 
 **Contractor Onboarding** 
@@ -109,8 +109,9 @@ Status: 45% Complete (SmartScope pipeline foundations implemented)
 
 ### 🔄 In Progress Now
 - Implementing project creation backend API endpoints
+- Building project creation wizard interface
 - Building contractor onboarding frontend components
-- Expanding SmartScope AI analysis capabilities (vision pipeline, feedback, cost tracking)
+- Expanding SmartScope AI analysis capabilities (vision pipeline, feedback, cost tracking) and setting up integration
 
 ### 🚫 Blockers
 - None currently
