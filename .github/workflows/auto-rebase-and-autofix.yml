@@ -19,10 +19,6 @@ permissions:
 env:
   CODEX_HANDLE: "@codex"
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   collect:
     if: github.event_name != 'issue_comment'
@@ -262,6 +258,10 @@ jobs:
         github.event.issue.pull_request != null &&
         contains(github.event.comment.body, '/autofix')
     runs-on: ubuntu-latest
+    # PR-specific concurrency to prevent workflow cancellation during conflict posting
+    concurrency:
+      group: autofix-pr-${{ github.event.issue.number }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with: 
@@ -276,7 +276,7 @@ jobs:
           script: |
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner, repo: context.repo.repo,
-              pull_number: context.payload.issue.number
+              pull_request: context.payload.issue.number
             });
             core.setOutput('number', pr.number);
             core.setOutput('ref', pr.head.ref);
