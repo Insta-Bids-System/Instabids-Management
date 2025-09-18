@@ -158,74 +158,64 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ matrix.pr.ref }}
 
-      - name: Generate detailed conflict report & ping Codex
+      - name: Post conflicts per file for Codex
         if: steps.conf.outputs.count != '0'
-        uses: actions/github-script@v7
+        run: |
+          python - <<'PY'
+          import re, json, pathlib, os, textwrap, math, sys
+          import subprocess as sp
+
+          def sh(c):
+              return sp.run(c, shell=True, capture_output=True, text=True, check=False)
+
+          # Find conflicted files (stages 1/2/3 present)
+          out = sh("git ls-files -u | cut -f2 | sort -u")
+          files = [f for f in out.stdout.splitlines() if f]
+
+          CON = re.compile(r"<<<<<<< [^\n]+\n(.*?)\n=======\n(.*?)\n>>>>>>> [^\n]+\n", re.S)
+
+          # Build per-file markdown with OURS/THEIRS blocks
+          payloads = []
+          MAX = 28000  # keep well under GH comment body limit (~65k). We'll split big files.
+          for path in files:
+              p = pathlib.Path(path)
+              try:
+                  t = p.read_text(errors="ignore")
+              except Exception:
+                  continue
+              blocks = []
+              for i,m in enumerate(CON.finditer(t), start=1):
+                  ours = m.group(1).rstrip()
+                  theirs = m.group(2).rstrip()
+                  chunk = f"**{path} — conflict {i}**\n\n" \
+                          f"```diff\n<<<<<<< OURS\n{ours}\n=======\n{theirs}\n>>>>>>> THEIRS\n```\n"
+                  blocks.append(chunk)
+              if not blocks:
+                  continue
+              body = f"@{os.environ.get('CODEX_HANDLE','codex').lstrip('@')} please resolve the conflicts in `{path}`.\n" \
+                     f"Return **GitHub Suggested changes** if possible; otherwise reply with a full file replacement in a fenced block like:\n\n" \
+                     f"```resolved:{path}\n<entire corrected file contents>\n```\n\n" \
+                     + "\n".join(blocks)
+
+              # split large comments
+              if len(body) <= MAX:
+                  payloads.append(body)
+              else:
+                  parts = math.ceil(len(body)/MAX)
+                  for i in range(parts):
+                      payloads.append(f"(part {i+1}/{parts})\n\n" + body[i*MAX:(i+1)*MAX])
+
+          # Post each payload as an issue comment
+          if payloads:
+              # use gh api (already installed on hosted runners)
+              for body in payloads:
+                  body = body.replace('"','\\"').replace("$","\\$")  # escape shell
+                  cmd = f'gh api repos/${{GITHUB_REPOSITORY}}/issues/${{matrix.pr.number}}/comments -f body="{body}"'
+                  sh(cmd)
+          PY
         env:
-          PR_NUMBER: ${{ matrix.pr.number }}
-        with:
-          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const { execSync } = require('child_process');
-            const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const prnum = Number(process.env.PR_NUMBER);
-            
-            // Extract detailed conflict content
-            let conflictDetails = [];
-            for (const file of files) {
-              try {
-                const content = fs.readFileSync(file, 'utf8');
-                const regex = /<<<<<<<[^\n]*\n(.*?)\n=======\n(.*?)\n>>>>>>>[^\n]*\n/gs;
-                let match;
-                let conflictIndex = 0;
-                
-                while ((match = regex.exec(content)) && conflictIndex < 3) {
-                  const ours = (match[1] || '').trim();
-                  const theirs = (match[2] || '').trim();
-                  
-                  const diffBlock = [
-                    '```diff',
-                    '--- ours',
-                    ours || '(empty)',
-                    '+++ theirs', 
-                    theirs || '(empty)',
-                    '```'
-                  ].join('\n');
-                  
-                  conflictDetails.push(`**${file}** (conflict ${conflictIndex + 1}):\n${diffBlock}`);
-                  conflictIndex++;
-                }
-              } catch (e) {
-                conflictDetails.push(`**${file}**: Could not read conflict details`);
-              }
-            }
-            
-            const body = [
-              '⚠️ Auto-rebase hit merge conflicts in the following files:',
-              ...files.map(f => `- \`${f}\``),
-              '',
-              '## Conflict Details',
-              ...conflictDetails,
-              '',
-              `${process.env.CODEX_HANDLE} please review these conflicts and provide GitHub *Suggested changes* to resolve them. The conflict details above show the exact differences that need to be merged.`
-            ].join('\n');
-            
-            await github.rest.issues.addLabels({ 
-              owner, repo, issue_number: prnum, 
-              labels: ['codex','needs-merge-help'] 
-            }).catch(()=>{});
-            
-            await github.rest.issues.createComment({ 
-              owner, repo, issue_number: prnum, body 
-            });
-            
-            await github.rest.pulls.requestReviewers({
-              owner, repo, pull_number: prnum,
-              reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          CODEX_HANDLE: ${{ env.CODEX_HANDLE }}
 
   one-pr:
     if: github.event_name == 'issue_comment' &&
@@ -344,70 +334,61 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
 
-      - name: Comment detailed conflicts & ping Codex (manual path)
+      - name: Post conflicts per file for Codex (manual path)
         if: steps.conf.outputs.count != '0'
-        uses: actions/github-script@v7
+        run: |
+          python - <<'PY'
+          import re, json, pathlib, os, textwrap, math, sys
+          import subprocess as sp
+
+          def sh(c):
+              return sp.run(c, shell=True, capture_output=True, text=True, check=False)
+
+          # Find conflicted files (stages 1/2/3 present)
+          out = sh("git ls-files -u | cut -f2 | sort -u")
+          files = [f for f in out.stdout.splitlines() if f]
+
+          CON = re.compile(r"<<<<<<< [^\n]+\n(.*?)\n=======\n(.*?)\n>>>>>>> [^\n]+\n", re.S)
+
+          # Build per-file markdown with OURS/THEIRS blocks
+          payloads = []
+          MAX = 28000  # keep well under GH comment body limit (~65k). We'll split big files.
+          for path in files:
+              p = pathlib.Path(path)
+              try:
+                  t = p.read_text(errors="ignore")
+              except Exception:
+                  continue
+              blocks = []
+              for i,m in enumerate(CON.finditer(t), start=1):
+                  ours = m.group(1).rstrip()
+                  theirs = m.group(2).rstrip()
+                  chunk = f"**{path} — conflict {i}**\n\n" \
+                          f"```diff\n<<<<<<< OURS\n{ours}\n=======\n{theirs}\n>>>>>>> THEIRS\n```\n"
+                  blocks.append(chunk)
+              if not blocks:
+                  continue
+              body = f"@{os.environ.get('CODEX_HANDLE','codex').lstrip('@')} please resolve the conflicts in `{path}`.\n" \
+                     f"Return **GitHub Suggested changes** if possible; otherwise reply with a full file replacement in a fenced block like:\n\n" \
+                     f"```resolved:{path}\n<entire corrected file contents>\n```\n\n" \
+                     + "\n".join(blocks)
+
+              # split large comments
+              if len(body) <= MAX:
+                  payloads.append(body)
+              else:
+                  parts = math.ceil(len(body)/MAX)
+                  for i in range(parts):
+                      payloads.append(f"(part {i+1}/{parts})\n\n" + body[i*MAX:(i+1)*MAX])
+
+          # Post each payload as an issue comment with the PR number from environment
+          if payloads:
+              # use gh api (already installed on hosted runners)
+              for body in payloads:
+                  body = body.replace('"','\\"').replace("$","\\$")  # escape shell
+                  cmd = f'gh api repos/${{GITHUB_REPOSITORY}}/issues/${{steps.pr.outputs.number}}/comments -f body="{body}"'
+                  sh(cmd)
+          PY
         env:
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-        with:
-          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const prnum = Number(process.env.PR_NUMBER);
-            
-            // Extract detailed conflict content
-            let conflictDetails = [];
-            for (const file of files) {
-              try {
-                const content = fs.readFileSync(file, 'utf8');
-                const regex = /<<<<<<<[^\n]*\n(.*?)\n=======\n(.*?)\n>>>>>>>[^\n]*\n/gs;
-                let match;
-                let conflictIndex = 0;
-                
-                while ((match = regex.exec(content)) && conflictIndex < 3) {
-                  const ours = (match[1] || '').trim();
-                  const theirs = (match[2] || '').trim();
-                  
-                  const diffBlock = [
-                    '```diff',
-                    '--- ours',
-                    ours || '(empty)',
-                    '+++ theirs', 
-                    theirs || '(empty)',
-                    '```'
-                  ].join('\n');
-                  
-                  conflictDetails.push(`**${file}** (conflict ${conflictIndex + 1}):\n${diffBlock}`);
-                  conflictIndex++;
-                }
-              } catch (e) {
-                conflictDetails.push(`**${file}**: Could not read conflict details`);
-              }
-            }
-            
-            const body = [
-              '⚠️ Auto-rebase (manual) hit merge conflicts in the following files:',
-              ...files.map(f => `- \`${f}\``),
-              '',
-              '## Conflict Details',
-              ...conflictDetails,
-              '',
-              `${process.env.CODEX_HANDLE} please review these conflicts and provide GitHub *Suggested changes* to resolve them. The conflict details above show the exact differences that need to be merged.`
-            ].join('\n');
-            
-            await github.rest.issues.addLabels({ 
-              owner, repo, issue_number: prnum, 
-              labels: ['codex','needs-merge-help'] 
-            }).catch(()=>{});
-            
-            await github.rest.issues.createComment({ 
-              owner, repo, issue_number: prnum, body 
-            });
-            
-            await github.rest.pulls.requestReviewers({
-              owner, repo, pull_number: prnum,
-              reviewers: [process.env.CODEX_HANDLE.replace(/^@/,'')]
-            }).catch(()=>{});
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          CODEX_HANDLE: ${{ env.CODEX_HANDLE }}
