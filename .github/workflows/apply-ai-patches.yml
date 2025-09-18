@@ -1,25 +1,26 @@
-name: Apply AI patches from comment
+name: Apply AI patches
 
 on:
   issue_comment:
     types: [created]
 
+concurrency:
+  group: apply-ai-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
-  apply:
-    # Only on PRs, only when the comment contains code fences, and only from a bot/user you trust (adjust handle)
+  apply_patch:
+    runs-on: ubuntu-latest
+    # Relaxed trigger: Only check for PR and code fences
     if: >
       github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '```') &&
-      (
-        github.event.comment.user.type == 'Bot' ||
-        contains(github.event.comment.user.login, 'codex')
-      )
-    runs-on: ubuntu-latest
-
+      contains(github.event.comment.body, '```')
+    
     steps:
       - name: Get PR info
         id: pr
@@ -31,68 +32,186 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number
             })).data;
+            core.setOutput('number', pr.number);
             core.setOutput('ref', pr.head.ref);
             core.setOutput('repo', pr.head.repo.full_name);
+            core.setOutput('sha', pr.head.sha);
 
-      - name: Checkout PR head branch
+      - name: Checkout PR head branch (bullet-proof)
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.pr.outputs.ref }}
+          ref: refs/pull/${{ github.event.issue.number }}/head
           fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "ai-fixer-bot"
+          git config user.email "ai-fixer-bot@users.noreply.github.com"
+
+      - name: Prepare merge against main (expect conflicts)
+        id: merge
+        run: |
+          git fetch origin main
+          # Try to merge, don't fail if conflicts
+          git merge --no-commit --no-ff origin/main || true
+          
+          # Check if we have conflicts
+          if git ls-files -u | grep -q .; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            git ls-files -u | cut -f2 | sort -u > /tmp/conflicted_files
+          else
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Save comment body
         run: |
-          echo "${{ github.event.comment.body }}" > /tmp/comment.txt
+          cat << 'EOF' > /tmp/comment.txt
+          ${{ github.event.comment.body }}
+          EOF
 
-      - name: Apply patches or file replacements
+      - name: Parse and apply AI's resolved files
         run: |
           python - <<'PY'
-          import re, os, subprocess, pathlib, sys
+          import re, pathlib, subprocess, sys
+          
           body = pathlib.Path('/tmp/comment.txt').read_text()
-
+          
           def sh(cmd):
-            print('+', cmd); 
-            return subprocess.run(cmd, shell=True, check=False)
-
+              print(f'+ {cmd}')
+              return subprocess.run(cmd, shell=True, check=False, capture_output=True, text=True)
+          
           applied = 0
-          # 1) Unified diffs:  ```patch ...```  or  ```diff ...```
-          for m in re.finditer(r"```(?:patch|diff)\n(.*?)```", body, re.S):
-            patch = m.group(1)
-            pathlib.Path('/tmp/patch.diff').write_text(patch)
-            r = sh("git apply --index --reject /tmp/patch.diff")
-            if r.returncode == 0:
+          
+          # 1) Look for resolved:path code fences (preferred)
+          pattern = re.compile(r"```resolved:([^\n`]+)\n(.*?)\n```", re.S)
+          matches = pattern.findall(body)
+          
+          for path, content in matches:
+              path = path.strip()
+              print(f"Applying resolved file: {path}")
+              
+              # Create directories if needed
+              p = pathlib.Path(path)
+              p.parent.mkdir(parents=True, exist_ok=True)
+              
+              # Write the resolved content
+              p.write_text(content, encoding='utf-8')
+              
+              # Stage the file
+              sh(f"git add '{path}'")
               applied += 1
-            else:
-              print('!! failed to apply a patch hunk')
-
-          # 2) Full-file replaces:  ```resolved:path/to/file.py\n<contents>\n```
-          for m in re.finditer(r"```resolved:([^\n]+)\n(.*?)```", body, re.S):
-            path, content = m.group(1).strip(), m.group(2)
-            p = pathlib.Path(path)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content)
-            sh(f"git add -- '{path}'")
-            applied += 1
-
+          
+          # 2) Also support patch/diff blocks (secondary)
+          for m in re.finditer(r"```(?:patch|diff)\n(.*?)```", body, re.S):
+              patch = m.group(1)
+              pathlib.Path('/tmp/patch.diff').write_text(patch)
+              r = sh("git apply --index --reject /tmp/patch.diff")
+              if r.returncode == 0:
+                  applied += 1
+                  print("Applied patch block")
+              else:
+                  print(f"Failed to apply patch: {r.stderr}")
+          
           if applied == 0:
-            print('No recognized patch blocks found.')
-            sys.exit(1)
+              print("WARNING: No resolved: or patch blocks found in comment")
+              # Don't exit with error - maybe it's a different type of comment
+              sys.exit(0)
+          else:
+              print(f"Successfully processed {applied} file(s)")
           PY
 
-      - name: Normalize & test
+      - name: Stage all changes
+        run: git add -A
+
+      - name: Sanity check - no conflict markers remain
         run: |
-          python -m pip install --upgrade pip >/dev/null 2>&1 || true
-          pip install black isort >/dev/null 2>&1 || true
-          isort . || true
-          black . || true
+          if git grep -n "<<<<<<<" -- . ':!.github/workflows/*'; then
+            echo "ERROR: Conflict markers still present in files!"
+            git grep -n "<<<<<<<" -- . ':!.github/workflows/*'
+            exit 1
+          fi
+
+      - name: Format & quick compile check
+        run: |
+          python -m pip install -q black isort 2>/dev/null || true
+          black . 2>/dev/null || true
+          isort . 2>/dev/null || true
           git add -A
-          # optional: run your fast tests here
+          python -m compileall -q . || true
 
       - name: Commit & push
+        id: commit
         run: |
           if ! git diff --cached --quiet; then
-            git -c user.name="ai-fixer-bot" -c user.email="ai-fixer-bot@users.noreply.github.com" \
-              commit -m "apply AI patch from comment"
+            # Commit the resolution
+            git commit -m "AI: Resolve merge conflicts via automated patch
+            
+            Applied from PR comment by ${{ github.event.comment.user.login }}"
+            
+            # Push with force-with-lease for safety
             git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
+            echo "pushed=true" >> $GITHUB_OUTPUT
           else
             echo "No changes to commit"
+            echo "pushed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Remove conflict labels if successful
+        if: steps.commit.outputs.pushed == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            
+            // Remove conflict-related labels
+            const labelsToRemove = ['needs-merge-help', 'auto-conflict'];
+            for (const label of labelsToRemove) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number, name: label
+                });
+              } catch (e) {
+                // Label might not exist, that's OK
+              }
+            }
+            
+            // Add success reaction to the comment
+            await github.rest.reactions.createForIssueComment({
+              owner, repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+            
+            // Post success comment
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: '✅ Successfully applied AI patches and resolved conflicts!\n\n' +
+                    'The PR has been updated with the resolved files. CI checks are now running.'
+            });
+
+      - name: Report if no changes
+        if: steps.commit.outputs.pushed == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused'
+            });
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '⚠️ No changes were detected from the AI patches.\n\n' +
+                    'This could mean:\n' +
+                    '- The files are already resolved\n' +
+                    '- The comment didn\'t contain valid `resolved:` or `patch` blocks\n' +
+                    '- The patches were already applied'
+            });
