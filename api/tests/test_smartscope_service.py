@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List
 from uuid import uuid4
-
-import sys
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
@@ -117,7 +116,11 @@ class FakeTable:
             records = list(self.storage[self.name])
             for filt in self._filters:
                 if filt["op"] == "eq":
-                    records = [r for r in records if str(r.get(filt["key"])) == str(filt["value"])]
+                    records = [
+                        r
+                        for r in records
+                        if str(r.get(filt["key"])) == str(filt["value"])
+                    ]
                 elif filt["op"] == "gte":
                     records = [
                         r
@@ -163,7 +166,7 @@ class FakeVisionService:
                         "title": "Replace P-trap",
                         "description": "Remove existing trap and install new PVC trap",
                         "trade": "Plumbing",
-                        "materials": ["1.5\" PVC P-trap"],
+                        "materials": ['1.5" PVC P-trap'],
                         "safety_notes": ["Shut off water"],
                         "estimated_hours": 1.5,
                     }
@@ -181,7 +184,9 @@ class FakeVisionService:
                 "confidence": 0.91,
             },
             "metadata": {
-                "model_version": "test", "processing_status": "completed", "tokens_used": 200
+                "model_version": "test",
+                "processing_status": "completed",
+                "tokens_used": 200,
             },
             "raw_response": {"ok": True},
         }
@@ -201,7 +206,9 @@ class FakeCostMonitor:
 
 
 @pytest.mark.asyncio
-async def test_openai_vision_service_parses_response(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_openai_vision_service_parses_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     request = AnalysisRequest(
         project_id=uuid4(),
         photo_urls=["https://example.com/image.jpg"],
@@ -329,7 +336,9 @@ async def test_accuracy_metrics_aggregation() -> None:
     )
 
     service = SmartScopeService(
-        supabase=supabase, vision_service=FakeVisionService(), cost_monitor=FakeCostMonitor()
+        supabase=supabase,
+        vision_service=FakeVisionService(),
+        cost_monitor=FakeCostMonitor(),
     )
 
     metrics = await service.get_accuracy_metrics()

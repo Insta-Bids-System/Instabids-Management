@@ -1,0 +1,112 @@
+name: Validate AI conflict resolutions
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  validate_resolution:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, 'resolved:') &&
+      github.event.comment.user.login == 'chatgpt-codex-connector[bot]'
+    
+    steps:
+      - name: Get PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = (await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            })).data;
+            core.setOutput('number', pr.number);
+            core.setOutput('ref', pr.head.ref);
+            core.setOutput('mergeable', pr.mergeable);
+            core.setOutput('mergeable_state', pr.mergeable_state);
+
+      - name: Checkout PR head branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            // Check conflicts without actually checking out
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            
+            // Get PR details
+            const pr = await github.rest.pulls.get({
+              owner, repo, pull_number: issue_number
+            });
+            
+            // Check if PR is still conflicted
+            const isConflicted = pr.data.mergeable === false && pr.data.mergeable_state === 'dirty';
+            
+            // Get all comments to find resolved files
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number
+            });
+            
+            const resolvedFiles = new Set();
+            const resolvedPattern = /```resolved:([^\n`]+)\n.*?\n```/gs;
+            
+            for (const comment of comments) {
+              let match;
+              while ((match = resolvedPattern.exec(comment.body)) !== null) {
+                const filePath = match[1].trim();
+                resolvedFiles.add(filePath);
+              }
+            }
+            
+            console.log('PR mergeable:', pr.data.mergeable);
+            console.log('PR mergeable_state:', pr.data.mergeable_state);
+            console.log('Resolved files found:', Array.from(resolvedFiles));
+            
+            if (isConflicted && resolvedFiles.size > 0) {
+              // Still conflicted but we have some resolutions
+              await github.rest.issues.createComment({
+                owner, repo, issue_number,
+                body: `⚠️ **Partial conflict resolution detected**\n\n` +
+                      `@codex has provided ${resolvedFiles.size} \`resolved:\` blocks, but the PR still shows conflicts.\n\n` +
+                      `**This usually means:**\n` +
+                      `- More files need resolution\n` +
+                      `- Some \`resolved:\` blocks may be incomplete\n` +
+                      `- The apply-ai-patches workflow hasn't run yet\n\n` +
+                      `**Files resolved so far:**\n${Array.from(resolvedFiles).map(f => \`- \\\`${f}\\\`\`).join('\\n')}\n\n` +
+                      `**Next steps:**\n` +
+                      `1. Check if all conflicted files have been resolved\n` +
+                      `2. Ensure each \`resolved:\` block contains the complete file content\n` +
+                      `3. Wait for the apply-ai-patches workflow to process the changes`
+              });
+              
+              // Add reaction to show we're monitoring
+              await github.rest.reactions.createForIssueComment({
+                owner, repo,
+                comment_id: context.payload.comment.id,
+                content: 'eyes'
+              });
+              
+            } else if (!isConflicted && resolvedFiles.size > 0) {
+              // All conflicts resolved!
+              await github.rest.issues.createComment({
+                owner, repo, issue_number,
+                body: '🎉 **All conflicts resolved!**\n\n' +
+                      `@codex successfully provided resolutions for ${resolvedFiles.size} files.\n\n` +
+                      'The PR should now be ready for merge. The apply-ai-patches workflow should run automatically.'
+              });
+              
+              await github.rest.reactions.createForIssueComment({
+                owner, repo,
+                comment_id: context.payload.comment.id,
+                content: 'rocket'
+              });
+            }

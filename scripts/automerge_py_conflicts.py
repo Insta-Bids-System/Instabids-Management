@@ -4,12 +4,16 @@ from pathlib import Path
 
 CONFLICT = re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
 
+
 def _dedupe(seq):
-    seen = set(); out=[]
+    seen = set()
+    out = []
     for s in seq:
         if s not in seen:
-            out.append(s); seen.add(s)
+            out.append(s)
+            seen.add(s)
     return out
+
 
 def merge_block(a: str, b: str) -> str | None:
     """Try to safely merge a & b; return merged or None if unsafe."""
@@ -55,6 +59,7 @@ def merge_block(a: str, b: str) -> str | None:
 
     return None  # unsafe
 
+
 def resolve_file(path: Path) -> bool:
     text = path.read_text()
     changed = False
@@ -72,6 +77,7 @@ def resolve_file(path: Path) -> bool:
         path.write_text(new)
     return changed
 
+
 def main():
     root = Path(".")
     changed_any = False
@@ -83,6 +89,7 @@ def main():
                 changed_any = True
     if not changed_any:
         print("no python conflicts resolved")
+
 
 if __name__ == "__main__":
     main()

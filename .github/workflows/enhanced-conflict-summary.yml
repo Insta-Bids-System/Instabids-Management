@@ -1,0 +1,113 @@
+name: Enhanced Conflict Resolution Summary
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  enhanced_summary:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'autorebase-bot' &&
+      contains(github.event.comment.body, 'Conflict Resolution Summary')
+    
+    steps:
+      - name: Enhanced conflict summary with validation
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            
+            // Get PR details to check current conflict status
+            const pr = await github.rest.pulls.get({
+              owner, repo, pull_number: issue_number
+            });
+            
+            // Get all comments to find existing resolved files
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number
+            });
+            
+            // Find conflicted files from the summary comment
+            const summaryComment = context.payload.comment.body;
+            const fileCountMatch = summaryComment.match(/Found (\d+) file\(s\) with merge conflicts/);
+            const conflictCount = fileCountMatch ? parseInt(fileCountMatch[1]) : 0;
+            
+            // Find already resolved files
+            const resolvedFiles = new Set();
+            const resolvedPattern = /```resolved:([^\n`]+)\n.*?\n```/gs;
+            
+            for (const comment of comments) {
+              let match;
+              while ((match = resolvedPattern.exec(comment.body)) !== null) {
+                const filePath = match[1].trim();
+                resolvedFiles.add(filePath);
+              }
+            }
+            
+            // Create enhanced summary
+            const enhancedSummary = `## 🚀 **Enhanced Conflict Resolution Guide**
+
+### **Current Status:**
+- **Conflicted Files:** ${conflictCount}
+- **Resolved Files:** ${resolvedFiles.size}
+- **Remaining:** ${Math.max(0, conflictCount - resolvedFiles.size)}
+
+### **✅ Files Already Resolved:**
+${resolvedFiles.size > 0 ? 
+  Array.from(resolvedFiles).map(f => `- ✅ \`${f}\``).join('\\n') :
+  '*None yet*'}
+
+### **🔧 Critical Instructions for @codex:**
+
+**📋 REQUIREMENTS:**
+1. **You MUST provide a \`\`\`resolved:\` block for EVERY conflicted file**
+2. **Each \`resolved:\` block must contain the COMPLETE file content**
+3. **Do NOT leave any file unresolved**
+4. **Do NOT stop until ALL conflicts are addressed**
+
+**📝 Required Format:**
+\`\`\`resolved:path/to/file.py
+[Complete file content here - no conflict markers]
+\`\`\`
+
+**⚠️ Quality Checklist:**
+- [ ] Remove ALL conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`)
+- [ ] Keep all necessary imports and functions
+- [ ] Maintain proper Python syntax and indentation
+- [ ] Include the complete file from start to finish
+
+**🔄 Process:**
+1. Review each conflict shown above
+2. Provide \`resolved:\` blocks for ALL files
+3. The apply-ai-patches workflow will automatically apply your fixes
+4. The validator will confirm when all conflicts are resolved
+
+**🎯 Success Criteria:**
+The PR will be considered resolved when:
+- All ${conflictCount} files have valid \`resolved:\` blocks
+- No conflict markers remain in any file
+- The PR shows \`mergeable: true\`
+
+@codex - Please begin resolving ALL conflicted files. **Do not stop until every file is complete.**`;
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: enhancedSummary
+            });
+            
+            // Add reaction to original summary
+            await github.rest.reactions.createForIssueComment({
+              owner, repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes'
+            });
