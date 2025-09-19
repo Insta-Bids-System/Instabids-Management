@@ -65,7 +65,7 @@ class VirtualAccessInfo(BaseModel):
     onsite_contact_name: Optional[str] = Field(None, max_length=255)
     onsite_contact_phone: Optional[str] = Field(
         None,
-        pattern=r"^\+?1?\d{9,15}$",
+        regex=r"^\+?1?\d{9,15}$",
         description="International E.164 formatted phone number",
     )
     parking_instructions: Optional[str] = Field(None, max_length=500)
@@ -115,7 +115,7 @@ class ProjectBase(BaseModel):
             return date.fromisoformat(value)
         return value
 
-    @root_validator(skip_on_failure=True)
+    @root_validator
     def validate_dates(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         preferred_start = values.get("preferred_start_date")
         completion = values.get("completion_deadline")
@@ -132,11 +132,7 @@ class ProjectBase(BaseModel):
 
         budget_min = values.get("budget_min")
         budget_max = values.get("budget_max")
-        if (
-            budget_min is not None
-            and budget_max is not None
-            and budget_min > budget_max
-        ):
+        if budget_min is not None and budget_max is not None and budget_min > budget_max:
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
         return values
@@ -183,15 +179,11 @@ class ProjectUpdate(BaseModel):
             raise ValueError("Bid deadline cannot be more than 7 days out")
         return value
 
-    @root_validator(skip_on_failure=True)
+    @root_validator
     def validate_budget_and_dates(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         budget_min = values.get("budget_min")
         budget_max = values.get("budget_max")
-        if (
-            budget_min is not None
-            and budget_max is not None
-            and budget_min > budget_max
-        ):
+        if budget_min is not None and budget_max is not None and budget_min > budget_max:
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
         preferred_start = values.get("preferred_start_date")
