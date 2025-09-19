@@ -132,7 +132,11 @@ class ProjectBase(BaseModel):
 
         budget_min = values.get("budget_min")
         budget_max = values.get("budget_max")
-        if budget_min is not None and budget_max is not None and budget_min > budget_max:
+        if (
+            budget_min is not None
+            and budget_max is not None
+            and budget_min > budget_max
+        ):
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
         return values
@@ -183,7 +187,11 @@ class ProjectUpdate(BaseModel):
     def validate_budget_and_dates(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         budget_min = values.get("budget_min")
         budget_max = values.get("budget_max")
-        if budget_min is not None and budget_max is not None and budget_min > budget_max:
+        if (
+            budget_min is not None
+            and budget_max is not None
+            and budget_min > budget_max
+        ):
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
         preferred_start = values.get("preferred_start_date")

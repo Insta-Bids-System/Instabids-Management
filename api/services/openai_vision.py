@@ -12,13 +12,23 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
-from openai import AsyncOpenAI
-from PIL import Image, ImageEnhance, ImageOps
-
 from config import settings
 from models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
-from services.smartscope_config import CATEGORY_SCOPE_TEMPLATES, SYSTEM_PROMPT, build_category_guidance
+from openai import AsyncOpenAI
+from PIL import Image, ImageEnhance, ImageOps
+from services.smartscope_config import (
+    CATEGORY_SCOPE_TEMPLATES,
+    SYSTEM_PROMPT,
+    build_category_guidance,
+)
 
+from ..config import settings
+from ..models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
+from .smartscope_config import (
+    CATEGORY_SCOPE_TEMPLATES,
+    SYSTEM_PROMPT,
+    build_category_guidance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +135,9 @@ class OpenAIVisionService:
         content = self._extract_text(response)
         data = self._parse_response(content)
 
-        data.setdefault("confidence", self._calculate_confidence(data, processed_images))
+        data.setdefault(
+            "confidence", self._calculate_confidence(data, processed_images)
+        )
         data.setdefault("additional_observations", [])
         data.setdefault("materials", [])
         data.setdefault("scope_items", [])
@@ -151,8 +163,11 @@ class OpenAIVisionService:
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": self._build_user_prompt(request, images)}
-                ]
+                    {
+                        "type": "input_text",
+                        "text": self._build_user_prompt(request, images),
+                    }
+                ],
             }
         ]
 
@@ -198,25 +213,25 @@ class OpenAIVisionService:
             f"{guidance}\n"
             "Respond with JSON using this schema:\n"
             "{\n"
-            "  \"primary_issue\": str,\n"
-            "  \"severity\": str (Emergency|High|Medium|Low),\n"
-            "  \"scope_items\": [\n"
+            '  "primary_issue": str,\n'
+            '  "severity": str (Emergency|High|Medium|Low),\n'
+            '  "scope_items": [\n'
             "    {\n"
-            "      \"title\": str,\n"
-            "      \"description\": str,\n"
-            "      \"trade\": str,\n"
-            "      \"materials\": [str],\n"
-            "      \"safety_notes\": [str],\n"
-            "      \"estimated_hours\": float\n"
+            '      "title": str,\n'
+            '      "description": str,\n'
+            '      "trade": str,\n'
+            '      "materials": [str],\n'
+            '      "safety_notes": [str],\n'
+            '      "estimated_hours": float\n'
             "    }\n"
             "  ],\n"
-            "  \"materials\": [\n"
-            "    {\"name\": str, \"quantity\": str, \"specifications\": str}\n"
+            '  "materials": [\n'
+            '    {"name": str, "quantity": str, "specifications": str}\n'
             "  ],\n"
-            "  \"estimated_hours\": float,\n"
-            "  \"safety_notes\": str,\n"
-            "  \"additional_observations\": [str],\n"
-            "  \"confidence\": float\n"
+            '  "estimated_hours": float,\n'
+            '  "safety_notes": str,\n'
+            '  "additional_observations": [str],\n'
+            '  "confidence": float\n'
             "}\n"
             f"Recommended workflow outline:\n{template_str}\n"
             "Ensure numbers are realistic and cite uncertainties."
@@ -227,7 +242,11 @@ class OpenAIVisionService:
         if hasattr(response, "output") and response.output:
             contents = response.output[0].get("content")  # type: ignore[index]
             if contents:
-                text_parts = [part.get("text") for part in contents if part.get("type") == "output_text"]
+                text_parts = [
+                    part.get("text")
+                    for part in contents
+                    if part.get("type") == "output_text"
+                ]
                 return "\n".join(filter(None, text_parts))
 
         if hasattr(response, "choices") and response.choices:

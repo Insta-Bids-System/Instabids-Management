@@ -1,5 +1,5 @@
 """Router package exports."""
 
-from . import auth, properties, projects, smartscope
+from . import auth, projects, properties, smartscope
 
 __all__ = ["auth", "properties", "projects", "smartscope"]

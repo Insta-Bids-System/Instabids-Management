@@ -1,16 +1,20 @@
 """
 Test configuration and fixtures for InstaBids Management API tests
 """
-import pytest
+
 import asyncio
+import os
+from typing import AsyncGenerator, Generator
+
+import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-import os
-from typing import Generator, AsyncGenerator
 
 # Set test environment variables before importing main
 os.environ["SUPABASE_URL"] = "https://lmbpvkfcfhdfaihigfdu.supabase.co"
-os.environ["SUPABASE_ANON_KEY"] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtYnB2a2ZjZmhkZmFpaGlnZmR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjgzNTIsImV4cCI6MjA3MzcwNDM1Mn0.WH4-iA_FnW1EqGTl-hcpotzqBGgeCutKWBBMaa6Tnmg"
+os.environ["SUPABASE_ANON_KEY"] = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtYnB2a2ZjZmhkZmFpaGlnZmR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjgzNTIsImV4cCI6MjA3MzcwNDM1Mn0.WH4-iA_FnW1EqGTl-hcpotzqBGgeCutKWBBMaa6Tnmg"
+)
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["API_ENV"] = "testing"
 
@@ -49,7 +53,7 @@ def test_user_data():
         "full_name": "Test User",
         "user_type": "property_manager",
         "phone": "+1234567890",
-        "organization_name": "Test Organization"
+        "organization_name": "Test Organization",
     }
 
 
@@ -57,21 +61,18 @@ def test_user_data():
 def test_contractor_data():
     """Test contractor registration data."""
     return {
-        "email": "contractor@instabids.com", 
+        "email": "contractor@instabids.com",
         "password": "TestPass123!",
         "full_name": "Test Contractor",
         "user_type": "contractor",
-        "phone": "+1987654321"
+        "phone": "+1987654321",
     }
 
 
 @pytest.fixture
 def test_login_data():
     """Test login data."""
-    return {
-        "email": "test@instabids.com",
-        "password": "TestPass123!"
-    }
+    return {"email": "test@instabids.com", "password": "TestPass123!"}
 
 
 @pytest.fixture
@@ -81,20 +82,19 @@ def invalid_user_data():
         "email": "invalid-email",
         "password": "weak",
         "full_name": "",
-        "user_type": "invalid_type"
+        "user_type": "invalid_type",
     }
 
 
 @pytest.fixture
 def auth_headers():
     """Mock authorization headers."""
-    return {
-        "Authorization": "Bearer test-jwt-token"
-    }
+    return {"Authorization": "Bearer test-jwt-token"}
 
 
 class TestConfig:
     """Test configuration constants."""
+
     TEST_DB_CLEANUP = True
     SUPABASE_TEST_PROJECT = "lmbpvkfcfhdfaihigfdu"
     API_BASE_URL = "http://localhost:8000"
