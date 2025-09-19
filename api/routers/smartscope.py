@@ -5,14 +5,15 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from models.user import User
-from services.smartscope_service import SmartScopeService
 
 from ..dependencies import get_current_user
-from ..models.smartscope import (AccuracyMetrics, AnalysisListResponse,
-                                 AnalysisRequest, FeedbackRequest,
-                                 SmartScopeAnalysis, dependencies, from,
-                                 get_current_user, import, models.smartscope)
+from ..models.smartscope import (
+    AccuracyMetrics,
+    AnalysisListResponse,
+    AnalysisRequest,
+    FeedbackRequest,
+    SmartScopeAnalysis,
+)
 from ..models.user import User
 from ..services.smartscope_service import SmartScopeService
 
