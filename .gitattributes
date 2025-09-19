@@ -2,7 +2,7 @@
 *.md                 merge=union
 requirements*.txt    merge=union
 
-# Generated/lock files – don’t hand merge
+# Generated/lock files – don't hand merge
 package-lock.json    merge=ours
 poetry.lock          merge=ours
 pnpm-lock.yaml       merge=ours
