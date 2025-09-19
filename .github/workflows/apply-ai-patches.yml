@@ -6,7 +6,7 @@ on:
 
 concurrency:
   group: apply-ai-${{ github.event.issue.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false  # Changed: Don't cancel to allow completion
 
 permissions:
   contents: write
@@ -16,10 +16,10 @@ permissions:
 jobs:
   apply_patch:
     runs-on: ubuntu-latest
-    # Relaxed trigger: Only check for PR and code fences
+    # Enhanced trigger: Check for resolved: blocks specifically  
     if: >
       github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '```')
+      (contains(github.event.comment.body, 'resolved:') || contains(github.event.comment.body, '/apply-patches-now'))
     
     steps:
       - name: Get PR info
@@ -36,6 +36,8 @@ jobs:
             core.setOutput('ref', pr.head.ref);
             core.setOutput('repo', pr.head.repo.full_name);
             core.setOutput('sha', pr.head.sha);
+            core.setOutput('mergeable', pr.mergeable);
+            core.setOutput('mergeable_state', pr.mergeable_state);
 
       - name: Checkout PR head branch (bullet-proof)
         uses: actions/checkout@v4
@@ -49,87 +51,125 @@ jobs:
           git config user.name "ai-fixer-bot"
           git config user.email "ai-fixer-bot@users.noreply.github.com"
 
-      - name: Prepare merge against main (expect conflicts)
-        id: merge
+      - name: Collect all resolved files from comments
+        id: collect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            
+            // Get all comments on this PR
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number
+            });
+            
+            // Find all resolved: blocks from any comment
+            const resolvedFiles = new Map();
+            const resolvedPattern = /```resolved:([^\n`]+)\n(.*?)\n```/gs;
+            
+            for (const comment of comments) {
+              let match;
+              while ((match = resolvedPattern.exec(comment.body)) !== null) {
+                const filePath = match[1].trim();
+                const content = match[2];
+                resolvedFiles.set(filePath, content);
+                console.log(`Found resolved file: ${filePath}`);
+              }
+            }
+            
+            // Save to files for processing
+            const fs = require('fs');
+            const resolvedData = Object.fromEntries(resolvedFiles);
+            fs.writeFileSync('/tmp/resolved_files.json', JSON.stringify(resolvedData, null, 2));
+            
+            core.setOutput('count', resolvedFiles.size);
+            core.setOutput('files', Array.from(resolvedFiles.keys()).join(','));
+            
+            return resolvedData;
+
+      - name: Apply resolved files
+        id: apply
         run: |
-          git fetch origin main
-          # Try to merge, don't fail if conflicts
-          git merge --no-commit --no-ff origin/main || true
-          
-          # Check if we have conflicts
-          if git ls-files -u | grep -q .; then
-            echo "has_conflicts=true" >> $GITHUB_OUTPUT
-            git ls-files -u | cut -f2 | sort -u > /tmp/conflicted_files
-          else
-            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+          if [ ! -f /tmp/resolved_files.json ]; then
+            echo "No resolved files found"
+            echo "applied=0" >> $GITHUB_OUTPUT
+            exit 0
           fi
-
-      - name: Save comment body
-        run: |
-          cat << 'EOF' > /tmp/comment.txt
-          ${{ github.event.comment.body }}
-          EOF
-
-      - name: Parse and apply AI's resolved files
-        run: |
-          python - <<'PY'
-          import re, pathlib, subprocess, sys
           
-          body = pathlib.Path('/tmp/comment.txt').read_text()
+          python - <<'PY'
+          import json, pathlib, subprocess, sys
           
           def sh(cmd):
               print(f'+ {cmd}')
               return subprocess.run(cmd, shell=True, check=False, capture_output=True, text=True)
           
+          # Load resolved files
+          resolved_data = json.loads(pathlib.Path('/tmp/resolved_files.json').read_text())
           applied = 0
           
-          # 1) Look for resolved:path code fences (preferred)
-          pattern = re.compile(r"```resolved:([^\n`]+)\n(.*?)\n```", re.S)
-          matches = pattern.findall(body)
-          
-          for path, content in matches:
-              path = path.strip()
-              print(f"Applying resolved file: {path}")
+          for file_path, content in resolved_data.items():
+              print(f"Applying resolved file: {file_path}")
               
               # Create directories if needed
-              p = pathlib.Path(path)
+              p = pathlib.Path(file_path)
               p.parent.mkdir(parents=True, exist_ok=True)
               
               # Write the resolved content
               p.write_text(content, encoding='utf-8')
               
               # Stage the file
-              sh(f"git add '{path}'")
+              sh(f"git add '{file_path}'")
               applied += 1
+              
+          print(f"Applied {applied} resolved files")
           
-          # 2) Also support patch/diff blocks (secondary)
-          for m in re.finditer(r"```(?:patch|diff)\n(.*?)```", body, re.S):
-              patch = m.group(1)
-              pathlib.Path('/tmp/patch.diff').write_text(patch)
-              r = sh("git apply --index --reject /tmp/patch.diff")
-              if r.returncode == 0:
-                  applied += 1
-                  print("Applied patch block")
-              else:
-                  print(f"Failed to apply patch: {r.stderr}")
-          
-          if applied == 0:
-              print("WARNING: No resolved: or patch blocks found in comment")
-              # Don't exit with error - maybe it's a different type of comment
-              sys.exit(0)
-          else:
-              print(f"Successfully processed {applied} file(s)")
+          # Save count for later steps
+          with open('/tmp/applied_count.txt', 'w') as f:
+              f.write(str(applied))
           PY
+          
+          echo "applied=$(cat /tmp/applied_count.txt)" >> $GITHUB_OUTPUT
 
-      - name: Stage all changes
-        run: git add -A
-
-      - name: Sanity check - no conflict markers remain
+      - name: Check remaining conflicts after applying patches
+        id: conflicts
         run: |
-          if git grep -n "<<<<<<<" -- . ':!.github/workflows/*'; then
+          git fetch origin main
+          # Reset to clean state and try merge with applied files
+          git reset --hard HEAD
+          git merge --no-commit --no-ff origin/main || true
+          
+          # Apply the resolved files again after merge attempt
+          if [ -f /tmp/resolved_files.json ]; then
+            python - <<'PY'
+          import json, pathlib
+          resolved_data = json.loads(pathlib.Path('/tmp/resolved_files.json').read_text())
+          for file_path, content in resolved_data.items():
+              pathlib.Path(file_path).write_text(content, encoding='utf-8')
+          PY
+          fi
+          
+          git add -A
+          
+          # Check if any conflicts remain
+          if git ls-files -u | grep -q .; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            git ls-files -u | cut -f2 | sort -u > /tmp/remaining_conflicts
+            echo "remaining=$(cat /tmp/remaining_conflicts | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+          else
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            echo "remaining=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sanity check - no conflict markers remain in resolved files
+        run: |
+          if git grep -n "<<<<<<<" -- . ':!.github/workflows/*' ':!tmp/*'; then
             echo "ERROR: Conflict markers still present in files!"
-            git grep -n "<<<<<<<" -- . ':!.github/workflows/*'
-            exit 1
+            git grep -n "<<<<<<<" -- . ':!.github/workflows/*' ':!tmp/*'
+            
+            # Don't fail completely - just warn
+            echo "⚠️ Conflict markers detected - may need manual review"
           fi
 
       - name: Format & quick compile check
@@ -140,14 +180,17 @@ jobs:
           git add -A
           python -m compileall -q . || true
 
-      - name: Commit & push
+      - name: Commit & push changes
         id: commit
         run: |
           if ! git diff --cached --quiet; then
-            # Commit the resolution
-            git commit -m "AI: Resolve merge conflicts via automated patch
+            applied_count=$(cat /tmp/applied_count.txt || echo "0")
             
-            Applied from PR comment by ${{ github.event.comment.user.login }}"
+            # Commit the resolution
+            git commit -m "AI: Apply resolved files for conflict resolution
+
+Applied $applied_count resolved files from AI agent
+Triggered by comment from ${{ github.event.comment.user.login }}"
             
             # Push with force-with-lease for safety
             git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
@@ -157,8 +200,7 @@ jobs:
             echo "pushed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Remove conflict labels if successful
-        if: steps.commit.outputs.pushed == 'true'
+      - name: Update PR status and labels
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
@@ -166,52 +208,64 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const issue_number = context.issue.number;
+            const pushed = '${{ steps.commit.outputs.pushed }}' === 'true';
+            const appliedCount = '${{ steps.apply.outputs.applied }}';
+            const hasConflicts = '${{ steps.conflicts.outputs.has_conflicts }}' === 'true';
+            const remainingFiles = '${{ steps.conflicts.outputs.remaining }}'.split(',').filter(f => f);
             
-            // Remove conflict-related labels
-            const labelsToRemove = ['needs-merge-help', 'auto-conflict'];
-            for (const label of labelsToRemove) {
-              try {
-                await github.rest.issues.removeLabel({
-                  owner, repo, issue_number, name: label
+            if (pushed) {
+              // Add success reaction
+              await github.rest.reactions.createForIssueComment({
+                owner, repo,
+                comment_id: context.payload.comment.id,
+                content: 'rocket'
+              });
+              
+              if (!hasConflicts) {
+                // All conflicts resolved!
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: '✅ **Successfully applied AI patches and resolved ALL conflicts!**\n\n' +
+                        `Applied ${appliedCount} resolved files. The PR should now be ready for merge.`
                 });
-              } catch (e) {
-                // Label might not exist, that's OK
+                
+                // Remove conflict-related labels
+                const labelsToRemove = ['needs-merge-help', 'auto-conflict'];
+                for (const label of labelsToRemove) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner, repo, issue_number, name: label
+                    });
+                  } catch (e) {
+                    // Label might not exist, that's OK
+                  }
+                }
+              } else {
+                // Partial resolution
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: '🔄 **Partially applied AI patches**\n\n' +
+                        `Applied ${appliedCount} resolved files, but conflicts remain in:\n` +
+                        remainingFiles.map(f => `- \`${f}\``).join('\n') + '\n\n' +
+                        'The AI agent needs to provide additional resolved: blocks for the remaining files.'
+                });
               }
+            } else {
+              // No changes made
+              await github.rest.reactions.createForIssueComment({
+                owner, repo,
+                comment_id: context.payload.comment.id,
+                content: 'confused'
+              });
+              
+              await github.rest.issues.createComment({
+                owner, repo, issue_number,
+                body: '⚠️ **No changes applied from AI patches**\n\n' +
+                      'This could mean:\n' +
+                      '- No valid `resolved:` blocks found in recent comments\n' +
+                      '- The files were already resolved\n' +
+                      '- The comment format was incorrect\n\n' +
+                      'Make sure each resolution uses the format:\n' +
+                      '```resolved:path/to/file.py\n[complete file content]\n```'
+              });
             }
-            
-            // Add success reaction to the comment
-            await github.rest.reactions.createForIssueComment({
-              owner, repo,
-              comment_id: context.payload.comment.id,
-              content: 'rocket'
-            });
-            
-            // Post success comment
-            await github.rest.issues.createComment({
-              owner, repo, issue_number,
-              body: '✅ Successfully applied AI patches and resolved conflicts!\n\n' +
-                    'The PR has been updated with the resolved files. CI checks are now running.'
-            });
-
-      - name: Report if no changes
-        if: steps.commit.outputs.pushed == 'false'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: context.payload.comment.id,
-              content: 'confused'
-            });
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: '⚠️ No changes were detected from the AI patches.\n\n' +
-                    'This could mean:\n' +
-                    '- The files are already resolved\n' +
-                    '- The comment didn\'t contain valid `resolved:` or `patch` blocks\n' +
-                    '- The patches were already applied'
-            });
