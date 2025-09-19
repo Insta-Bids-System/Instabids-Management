@@ -18,6 +18,7 @@ Service Key: [NEVER COMMIT]
 InstaBids-Management/
 ├── CLAUDE.md              # THIS FILE - Always read first
 ├── PROGRESS.md           # Current sprint status
+├── UI_DEVELOPMENT_GUIDE.md # UI consistency rules
 ├── docs/                 # Master documentation
 │   ├── VISION.md        # Business strategy
 │   ├── PAIN_POINTS.md   # Problems we solve
@@ -28,7 +29,15 @@ InstaBids-Management/
 ├── specs/               # Feature specifications
 ├── migrations/          # Database migrations
 │   └── applied.md      # Track what's in Supabase
-├── src/                # Source code
+├── web/                 # Next.js web application
+│   └── src/components/  # Web-specific UI components
+├── mobile/              # React Native Expo app
+│   └── src/             # Mobile-specific UI components
+├── packages/shared/     # Shared logic between platforms
+│   ├── types/          # TypeScript interfaces
+│   ├── schemas/        # Zod validation schemas
+│   └── api/            # API client functions
+├── api/                # FastAPI backend
 └── tests/             # Test suites
 ```
 
@@ -115,12 +124,21 @@ When starting a new chat session:
 - Staging Environment: [TO BE ADDED]
 - Production: [TO BE ADDED]
 
+## 🎨 UI Development Approach (CRITICAL)
+**We build UI for BOTH web and mobile in PARALLEL**
+- Every UI component gets built twice: once for web (Next.js/Tailwind), once for mobile (React Native)
+- Business logic is SHARED via packages/shared/
+- UI is SEPARATE but consistent in functionality
+- This adds only 10-15% overhead vs 40% for fully shared UI
+- See UI_DEVELOPMENT_GUIDE.md for detailed patterns
+
 ## ⚠️ Critical Notes
 - NEVER commit service keys
 - Always update migrations/applied.md after DB changes
 - Update PROGRESS.md after completing tasks
+- Build UI for BOTH platforms when adding features
 - Keep this file under 200 lines
 
 ---
-Last Updated: 2025-01-17
-Current Week: 1 of 12
+Last Updated: 2025-01-18
+Current Week: 2 of 12
