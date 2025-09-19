@@ -299,7 +299,7 @@ class SmartScopeService:
         feedback = (
             self.supabase.table("smartscope_feedback")
             .select("accuracy_rating, analysis_id, created_at")
-            .order("created_at", desc=True)
+            .order("created_at", desc=True")
             .execute()
         )
 
@@ -353,8 +353,12 @@ class SmartScopeService:
     def _build_analysis_from_record(
         record: Dict[str, Any], metadata: Dict[str, Any]
     ) -> SmartScopeAnalysis:
-        created_at = datetime.fromisoformat(record["created_at"]) if isinstance(record.get("created_at"), str) else record.get("created_at")
-        updated_at = datetime.fromisoformat(record["updated_at"]) if isinstance(record.get("updated_at"), str) else record.get("updated_at")
+        created_at = datetime.fromisoformat(record["created_at"]) if isinstance(record.get("created_at"), str) else record.get(
+            "created_at"
+        )
+        updated_at = datetime.fromisoformat(record["updated_at"]) if isinstance(record.get("updated_at"), str) else record.get(
+            "updated_at"
+        )
         return SmartScopeAnalysis(
             id=UUID(record["id"]),
             project_id=UUID(record["project_id"]),
