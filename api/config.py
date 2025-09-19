@@ -37,13 +37,6 @@ class Settings(BaseSettings):
     rate_limit_period: int = 3600
 
     # OpenAI / SmartScope
-    openai_api_key: str = ""
-    smartscope_model: str = "gpt-4-vision-preview"
-    smartscope_max_output_tokens: int = 1200
-    smartscope_temperature: float = 0.2
-    smartscope_confidence_threshold: float = 0.75
-
-    # OpenAI / SmartScope
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     smartscope_model: str = os.getenv("SMARTSCOPE_MODEL", "gpt-4.1-mini")
     smartscope_max_output_tokens: int = int(
