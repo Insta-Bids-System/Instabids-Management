@@ -10,9 +10,7 @@ from supabase import Client
 
 logger = logging.getLogger(__name__)
 
-TOKEN_COST_USD = (
-    0.00001  # Approximate blended rate for GPT-4.1 mini input/output tokens
-)
+TOKEN_COST_USD = 0.00001  # Approximate blended rate for GPT-4.1 mini input/output tokens
 
 
 class CostMonitor:
@@ -63,9 +61,7 @@ class CostMonitor:
         daily_total = self._sum_costs_since(now - timedelta(days=1))
         monthly_total = self._sum_costs_since(now - timedelta(days=30))
 
-        daily_usage = (
-            (daily_total / self.daily_budget) * 100 if self.daily_budget else 0
-        )
+        daily_usage = (daily_total / self.daily_budget) * 100 if self.daily_budget else 0
         monthly_usage = (
             (monthly_total / self.monthly_budget) * 100 if self.monthly_budget else 0
         )
