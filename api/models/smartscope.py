@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, field_validator, ConfigDict
+
 
 SMARTSCOPE_SEVERITIES = {"Emergency", "High", "Medium", "Low"}
 
@@ -15,9 +16,7 @@ class ScopeItem(BaseModel):
     """Represents a single actionable scope item returned by the AI."""
 
     title: str = Field(..., description="Human readable title summarising the work")
-    description: str = Field(
-        ..., description="Detailed set of instructions for contractors"
-    )
+    description: str = Field(..., description="Detailed set of instructions for contractors")
     trade: Optional[str] = Field(
         default=None, description="Primary trade responsible for this line item"
     )
@@ -50,9 +49,7 @@ class AnalysisRequest(BaseModel):
     photo_urls: List[AnyHttpUrl]
     property_type: str = Field(..., description="Residential, Commercial, etc")
     area: str = Field(..., description="Location inside the property such as Kitchen")
-    reported_issue: str = Field(
-        ..., description="User reported description of the problem"
-    )
+    reported_issue: str = Field(..., description="User reported description of the problem")
     category: str = Field(..., description="Maintenance category e.g. Plumbing")
     organization_id: Optional[UUID] = Field(
         default=None, description="Organisation requesting the analysis"
