@@ -12,15 +12,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
-from config import settings
-from models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
 from openai import AsyncOpenAI
 from PIL import Image, ImageEnhance, ImageOps
-from services.smartscope_config import (
-    CATEGORY_SCOPE_TEMPLATES,
-    SYSTEM_PROMPT,
-    build_category_guidance,
-)
 
 from ..config import settings
 from ..models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
@@ -126,7 +119,7 @@ class OpenAIVisionService:
 
         payload = self._build_prompt_payload(request, processed_images)
         try:
-            response = await self.client.responses.create(**payload)
+            response = await self.client.chat.completions.create(**payload)
         except Exception as exc:  # pragma: no cover - network failure path
             logger.exception("OpenAI Vision request failed: %s", exc)
             raise RuntimeError("Failed to analyse photos with OpenAI Vision") from exc
@@ -159,40 +152,37 @@ class OpenAIVisionService:
     def _build_prompt_payload(
         self, request: AnalysisRequest, images: List[ProcessedImage]
     ) -> Dict[str, Any]:
-        image_inputs = [
+        content = [
             {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": self._build_user_prompt(request, images),
-                    }
-                ],
+                "type": "text",
+                "text": self._build_user_prompt(request, images),
             }
         ]
 
         for processed in images:
-            image_inputs[0]["content"].append(
+            content.append(
                 {
-                    "type": "input_image",
-                    "image": {
-                        "data": processed.base64_data,
-                        "format": "jpeg",
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{processed.base64_data}"
                     },
                 }
             )
 
         return {
             "model": settings.smartscope_model,
-            "input": [
+            "messages": [
                 {
                     "role": "system",
-                    "content": [{"type": "input_text", "text": SYSTEM_PROMPT}],
+                    "content": SYSTEM_PROMPT,
                 },
-                *image_inputs,
+                {
+                    "role": "user",
+                    "content": content,
+                },
             ],
             "temperature": settings.smartscope_temperature,
-            "max_output_tokens": settings.smartscope_max_output_tokens,
+            "max_tokens": settings.smartscope_max_output_tokens,
         }
 
     def _build_user_prompt(
@@ -239,16 +229,6 @@ class OpenAIVisionService:
 
     @staticmethod
     def _extract_text(response: Any) -> str:
-        if hasattr(response, "output") and response.output:
-            contents = response.output[0].get("content")  # type: ignore[index]
-            if contents:
-                text_parts = [
-                    part.get("text")
-                    for part in contents
-                    if part.get("type") == "output_text"
-                ]
-                return "\n".join(filter(None, text_parts))
-
         if hasattr(response, "choices") and response.choices:
             return response.choices[0].message.content  # type: ignore[return-value]
 
