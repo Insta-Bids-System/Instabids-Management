@@ -7,16 +7,17 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from models.project import (
+from supabase import Client
+
+from ..models.project import (
     Project,
     ProjectCreate,
     ProjectFilter,
     ProjectStatus,
     ProjectUpdate,
 )
-from models.user import User
-from services.supabase import supabase_service
-from supabase import Client
+from ..models.user import User
+from .supabase import supabase_service
 
 
 class ProjectService:
@@ -25,10 +26,7 @@ class ProjectService:
     def __init__(self, supabase: Optional[Client] = None) -> None:
         """Create a ProjectService instance backed by a Supabase client."""
         self.supabase = supabase or supabase_service.client
-
-    async def create_project(
-        self, payload: ProjectCreate, current_user: User
-    ) -> Project:
+    async def create_project(self, payload: ProjectCreate, current_user: User) -> Project:
         """Create a new project after verifying permissions and inputs."""
         self._ensure_creator_permissions(current_user)
 
@@ -95,7 +93,9 @@ class ProjectService:
             query = query.eq("property_id", str(filters.property_id))
         if filters.search:
             like = f"%{filters.search}%"
-            query = query.or_(f"title.ilike.{like},description.ilike.{like}")
+            query = query.or_(
+                f"title.ilike.{like},description.ilike.{like}"
+            )
 
         offset = (page - 1) * per_page
         query = query.range(offset, offset + per_page - 1)
@@ -180,7 +180,10 @@ class ProjectService:
             )
 
         result = (
-            self.supabase.table("projects").delete().eq("id", str(project_id)).execute()
+            self.supabase.table("projects")
+            .delete()
+            .eq("id", str(project_id))
+            .execute()
         )
 
         if not result.data:
@@ -229,11 +232,7 @@ class ProjectService:
                     detail="You cannot modify projects for another organization",
                 )
 
-        if (
-            current_user.role == "manager"
-            and manager_id
-            and manager_id != str(current_user.id)
-        ):
+        if current_user.role == "manager" and manager_id and manager_id != str(current_user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Managers can only manage their assigned properties",
@@ -256,30 +255,22 @@ class ProjectService:
             "category": payload.category.value,
             "urgency": payload.urgency.value,
             "bid_deadline": payload.bid_deadline.isoformat(),
-            "preferred_start_date": (
-                payload.preferred_start_date.isoformat()
-                if payload.preferred_start_date
-                else None
-            ),
-            "completion_deadline": (
-                payload.completion_deadline.isoformat()
-                if payload.completion_deadline
-                else None
-            ),
+            "preferred_start_date": payload.preferred_start_date.isoformat()
+            if payload.preferred_start_date
+            else None,
+            "completion_deadline": payload.completion_deadline.isoformat()
+            if payload.completion_deadline
+            else None,
             "budget_min": payload.budget_min,
             "budget_max": payload.budget_max,
-            "budget_range": (
-                payload.budget_range.value if payload.budget_range else None
-            ),
+            "budget_range": payload.budget_range.value if payload.budget_range else None,
             "insurance_required": payload.insurance_required,
             "license_required": payload.license_required,
             "minimum_bids": payload.minimum_bids,
             "is_open_bidding": payload.is_open_bidding,
-            "virtual_access": (
-                payload.virtual_access.dict(exclude_none=True)
-                if payload.virtual_access
-                else None
-            ),
+            "virtual_access": payload.virtual_access.dict(exclude_none=True)
+            if payload.virtual_access
+            else None,
             "location_details": payload.location_details,
             "special_conditions": payload.special_conditions,
             "status": status_value,
@@ -326,7 +317,7 @@ class ProjectService:
             self.supabase.table("properties")
             .select("id")
             .eq("organization_id", str(current_user.organization_id))
-            .eq("deleted_at", None)
+            .is_("deleted_at", None)
         )
 
         if current_user.role == "manager":
