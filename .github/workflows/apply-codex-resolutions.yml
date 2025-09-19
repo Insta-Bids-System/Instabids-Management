@@ -1,0 +1,71 @@
+ name: Apply Codex resolutions
+
+  on:
+    issue_comment:
+      types: [created]
+
+  permissions:
+    contents: write
+    pull-requests: write
+
+  jobs:
+    apply:
+      if: >
+        github.event.issue.pull_request != null &&
+        (
+          github.event.comment.user.login == 'chatgpt-codex-connector[bot]' ||
+          contains(github.event.comment.body, '```resolved:')
+        )
+      runs-on: ubuntu-latest
+      steps:
+        - name: Get PR info
+          id: pr
+          uses: actions/github-script@v7
+          with:
+            script: |
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.issue.number
+              });
+              core.setOutput('ref', pr.head.ref);
+
+        - uses: actions/checkout@v4
+          with:
+            ref: ${{ steps.pr.outputs.ref }}
+            fetch-depth: 0
+            token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+        - name: Extract resolved files from comment and write to tree
+          id: write
+          run: |
+            python - <<'PY'
+            import os, re, pathlib, sys, json
+            body = os.environ["BODY"]
+            # look for blocks like ```resolved:path/to/file.py\n<content>\n```
+            pattern = re.compile(r"```resolved:([^\n`]+)\n(.*?)\n```", re.S)
+            matches = pattern.findall(body)
+            if not matches:
+                print("::set-output name=changed::0")
+                sys.exit(0)
+            changed = 0
+            for path,content in matches:
+                p = pathlib.Path(path)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding="utf-8")
+                changed += 1
+            print(f"wrote {changed} files")
+            print(f"::set-output name=changed::{changed}")
+            PY
+          env:
+            BODY: ${{ github.event.comment.body }}
+
+        - name: Commit and push
+          if: steps.write.outputs.changed != '0'
+          run: |
+            git config user.name  "codex-applier-bot"
+            git config user.email "codex-applier-bot@users.noreply.github.com"
+            git add -A
+            git commit -m "apply codex resolutions from comment ${{
+  github.event.comment.id }}"
+            git push
