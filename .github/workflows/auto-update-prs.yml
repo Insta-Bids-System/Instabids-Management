@@ -1,0 +1,21 @@
+name: Auto-update PRs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  auto-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Auto-update open PRs
+        uses: adRise/update-pr-branch@v0.7.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          sort: created
+          direction: desc
