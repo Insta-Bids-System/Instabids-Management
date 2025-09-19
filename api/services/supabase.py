@@ -1,8 +1,6 @@
+from supabase import create_client, Client
 from typing import Optional, Dict, Any
 import logging
-
-from supabase import create_client, Client
-
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +19,11 @@ class SupabaseService:
         return cls._instance
 
     def __init__(self):
-        if self._client is None and settings.supabase_url and settings.supabase_anon_key:
+        if (
+            self._client is None
+            and settings.supabase_url
+            and settings.supabase_anon_key
+        ):
             self._initialize_clients()
 
     def _initialize_clients(self):
@@ -83,7 +85,7 @@ class SupabaseService:
         try:
             response = self.client.auth.sign_in_with_password({
                 "email": email,
-                "password": password
+                "password": password,
             })
             return {
                 "user": response.user,
