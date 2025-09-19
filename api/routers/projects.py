@@ -3,9 +3,8 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
-
 from dependencies import get_current_user
+from fastapi import APIRouter, Depends, Query, status
 from models.project import (
     Project,
     ProjectCreate,

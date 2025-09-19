@@ -104,7 +104,9 @@ additional photos if confidence is low.
 def build_category_guidance(category: str) -> str:
     """Generate a human readable guidance string for the prompt."""
 
-    config = CATEGORY_CONTEXT.get(category, CATEGORY_CONTEXT.get("General Maintenance", {}))
+    config = CATEGORY_CONTEXT.get(
+        category, CATEGORY_CONTEXT.get("General Maintenance", {})
+    )
     focus = "\n".join(f"- {item}" for item in config.get("focus", []))
     materials = "\n".join(f"- {item}" for item in config.get("materials", []))
 

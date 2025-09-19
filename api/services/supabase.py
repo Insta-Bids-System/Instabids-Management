@@ -1,26 +1,32 @@
-from supabase import create_client, Client
-from typing import Optional, Dict, Any
 import logging
+from typing import Any, Dict, Optional
+
 from config import settings
+from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
 
+
 class SupabaseService:
     """Singleton service for Supabase interactions"""
-    
-    _instance: Optional['SupabaseService'] = None
+
+    _instance: Optional["SupabaseService"] = None
     _client: Optional[Client] = None
     _service_client: Optional[Client] = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
-        if self._client is None and settings.supabase_url and settings.supabase_anon_key:
+        if (
+            self._client is None
+            and settings.supabase_url
+            and settings.supabase_anon_key
+        ):
             self._initialize_clients()
-    
+
     def _initialize_clients(self):
         """Initialize Supabase clients"""
         try:
@@ -28,27 +34,27 @@ class SupabaseService:
                 raise ValueError("Supabase configuration missing")
             # Public client (uses anon key)
             self._client = create_client(
-                settings.supabase_url,
-                settings.supabase_anon_key
+                settings.supabase_url, settings.supabase_anon_key
             )
-            
+
             # Service client (uses service key) - for admin operations
             if settings.supabase_service_key:
                 self._service_client = create_client(
-                    settings.supabase_url,
-                    settings.supabase_service_key
-                )            
-            logger.info(f"Supabase clients initialized successfully for {settings.supabase_url}")
+                    settings.supabase_url, settings.supabase_service_key
+                )
+            logger.info(
+                f"Supabase clients initialized successfully for {settings.supabase_url}"
+            )
         except Exception as e:
             logger.error(f"Failed to initialize Supabase clients: {e}")
             raise
-    
+
     def force_reinitialize(self):
         """Force reinitialize clients with current settings"""
         self._client = None
         self._service_client = None
         self._initialize_clients()
-    
+
     @property
     def client(self) -> Client:
         """Get the public Supabase client"""
@@ -66,35 +72,36 @@ class SupabaseService:
                 raise ValueError("Supabase service configuration missing")
             self._initialize_clients()
         return self._service_client
-    
-    async def create_user(self, email: str, password: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def create_user(
+        self, email: str, password: str, user_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Create a new user with Supabase Auth"""
         try:
-            response = self.service_client.auth.admin.create_user({
-                "email": email,
-                "password": password,
-                "email_confirm": False,
-                "user_metadata": user_data
-            })
+            response = self.service_client.auth.admin.create_user(
+                {
+                    "email": email,
+                    "password": password,
+                    "email_confirm": False,
+                    "user_metadata": user_data,
+                }
+            )
             return response.user
         except Exception as e:
             logger.error(f"Failed to create user: {e}")
-            raise    
+            raise
+
     async def sign_in(self, email: str, password: str) -> Dict[str, Any]:
         """Sign in a user"""
         try:
-            response = self.client.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-            return {
-                "user": response.user,
-                "session": response.session
-            }
+            response = self.client.auth.sign_in_with_password(
+                {"email": email, "password": password}
+            )
+            return {"user": response.user, "session": response.session}
         except Exception as e:
             logger.error(f"Failed to sign in user: {e}")
             raise
-    
+
     async def sign_out(self, access_token: str) -> bool:
         """Sign out a user"""
         try:
@@ -103,7 +110,7 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Failed to sign out user: {e}")
             return False
-    
+
     async def verify_token(self, access_token: str) -> Optional[Dict[str, Any]]:
         """Verify and decode a JWT token"""
         try:
@@ -112,6 +119,7 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Failed to verify token: {e}")
             return None
+
 
 # Singleton instance
 supabase_service = SupabaseService()
