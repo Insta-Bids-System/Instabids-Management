@@ -52,9 +52,7 @@ async def list_project_analyses(
 ) -> AnalysisListResponse:
     """List SmartScope analyses for a project with pagination."""
 
-    analyses, total = await service.list_analyses(
-        project_id, current_user, page=page, per_page=per_page
-    )
+    analyses, total = await service.list_analyses(project_id, current_user, page=page, per_page=per_page)
     return AnalysisListResponse(
         analyses=analyses,
         total=total,
