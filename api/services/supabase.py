@@ -1,9 +1,12 @@
-from supabase import create_client, Client
 from typing import Optional, Dict, Any
 import logging
+
+from supabase import create_client, Client
+
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
 
 class SupabaseService:
     """Singleton service for Supabase interactions"""
@@ -74,12 +77,13 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Failed to create user: {e}")
             raise
+
     async def sign_in(self, email: str, password: str) -> Dict[str, Any]:
         """Sign in a user"""
         try:
             response = self.client.auth.sign_in_with_password({
                 "email": email,
-                "password": password"
+                "password": password
             })
             return {
                 "user": response.user,
@@ -106,6 +110,7 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Failed to verify token: {e}")
             return None
+
 
 # Singleton instance
 supabase_service = SupabaseService()
