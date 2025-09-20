@@ -25,6 +25,9 @@ const registerSchema = z.object({
 })
 
 type RegisterFormData = z.infer<typeof registerSchema>
+type RegisterPayload = Omit<RegisterFormData, 'confirmPassword' | 'organization_name'> & {
+  organization_name?: string
+}
 
 export default function RegisterForm() {
   const { register: registerUser } = useAuth()
@@ -38,8 +41,15 @@ export default function RegisterForm() {
     formState: { errors }
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+    mode: 'onBlur',
     defaultValues: {
-      user_type: 'property_manager'
+      user_type: 'property_manager',
+      full_name: '',
+      email: '',
+      phone: '',
+      organization_name: '',
+      password: '',
+      confirmPassword: ''
     }
   })
 
@@ -50,8 +60,18 @@ export default function RegisterForm() {
     setIsLoading(true)
     
     try {
-      const { confirmPassword, ...registerData } = data
-      await registerUser(registerData)
+      const { confirmPassword, organization_name, phone, ...rest } = data
+
+      const payload: RegisterPayload = {
+        ...rest,
+        phone: phone ?? ''
+      }
+
+      if (data.user_type === 'property_manager' && organization_name) {
+        payload.organization_name = organization_name
+      }
+
+      await registerUser(payload)
     } catch (err) {
       setError((err as Error).message || 'Registration failed')
     } finally {
