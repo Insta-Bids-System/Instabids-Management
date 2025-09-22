@@ -17,7 +17,10 @@ description: Instabids Management build audit and remaining work tracker
 ## 🚧 High-Priority Gaps & Follow-Up Tasks
 
 ### Platform & DevOps
-1. ~~Replace placeholder Supabase/AI credentials in `api/config.py` with secure environment management and document setup for local + production usage.~~ ✅ Config now loads secrets exclusively from environment variables, supporting local `.env` files and production secret managers with updated documentation.
+
+1. ✅ Config now loads secrets exclusively from environment variables, supporting local `.env` files and production secret managers with updated documentation.
+1. Replace placeholder Supabase/AI credentials in `api/config.py` with secure environment management and document setup for local + production usage.
+
 2. Provide infrastructure scripts or instructions for provisioning required storage buckets, Edge Functions, and webhook endpoints referenced in specs but absent from the repo.
 3. Implement CI workflows (lint, tests, type-check) and ensure both API and web apps have reproducible dependency locks.
 
