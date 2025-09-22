@@ -15,9 +15,9 @@ import httpx
 from openai import AsyncOpenAI
 from PIL import Image, ImageEnhance, ImageOps
 
-from ..config import settings
-from ..models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
-from .smartscope_config import (
+from config import settings
+from models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
+from services.smartscope_config import (
     CATEGORY_SCOPE_TEMPLATES,
     SYSTEM_PROMPT,
     build_category_guidance,
