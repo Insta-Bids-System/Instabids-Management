@@ -6,6 +6,13 @@ This document provides a comprehensive task breakdown for implementing the Insta
 
 **Target Goal**: Enable property managers to create maintenance projects in under 2 minutes with automatic contractor matching and invitation.
 
+> **Status Review (2025-02-14)**
+>
+> | Phase | Implemented Work | Coverage Against Acceptance Criteria |
+> | --- | --- | --- |
+> | 1.2 – Basic API Endpoints | FastAPI router and Supabase-backed service provide create/list/get/update/delete/status endpoints for projects. | Partial – endpoints exist, but the documented requirements for TypeScript/Express middleware, structured error handling, and automated tests are not present. |
+> | All other phases | No implementation present in the repository (no media upload services, contractor matching, invitation workflows, SmartScope triggers, or project creation UI). | Not started. |
+
 ---
 
 ## Phase 1: Core Infrastructure (Week 1-2)

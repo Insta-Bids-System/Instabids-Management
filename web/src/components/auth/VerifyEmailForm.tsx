@@ -1,33 +1,49 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function VerifyEmailForm() {
-  const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'resent'>('verifying')
-  const [error, setError] = useState<string | null>(null)
-  const [email, setEmail] = useState('')
-  const [isResending, setIsResending] = useState(false)
   const searchParams = useSearchParams()
   const router = useRouter()
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-  useEffect(() => {
-    const token = searchParams.get('token')
-    const emailParam = searchParams.get('email')
-    
-    if (emailParam) {
-      setEmail(emailParam)
-    }
+  const token = searchParams.get('token')
+  const emailParam = searchParams.get('email') ?? ''
+  const verificationKey = token ? `${apiUrl}::${token}` : null
 
-    if (token) {
-      verifyEmail(token)
-    } else {
+  const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'resent'>(() =>
+    token ? 'verifying' : 'error'
+  )
+  const [error, setError] = useState<string | null>(() =>
+    token ? null : 'Verification token is missing'
+  )
+  const [email, setEmail] = useState(() => emailParam)
+  const [isResending, setIsResending] = useState(false)
+  const [canResend, setCanResend] = useState(() => Boolean(emailParam))
+  const lastVerificationKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    setEmail(emailParam)
+    setCanResend((previous) => previous || Boolean(emailParam))
+
+    if (!token) {
       setStatus('error')
       setError('Verification token is missing')
+      lastVerificationKeyRef.current = null
+      return
     }
-  }, [searchParams])
+
+    if (lastVerificationKeyRef.current === verificationKey) {
+      return
+    }
+
+    lastVerificationKeyRef.current = verificationKey
+    setStatus('verifying')
+    setError(null)
+    verifyEmail(token)
+  }, [token, emailParam, apiUrl, verificationKey])
 
   async function verifyEmail(token: string) {
     try {
@@ -37,7 +53,7 @@ export default function VerifyEmailForm() {
         body: JSON.stringify({ token })
       })
 
-      if (!response.ok) {
+      if (!response || !response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.detail || 'Verification failed')
       }
@@ -49,6 +65,7 @@ export default function VerifyEmailForm() {
     } catch (err) {
       setStatus('error')
       setError((err as Error).message || 'Verification failed')
+      lastVerificationKeyRef.current = null
     }
   }
 
@@ -59,6 +76,7 @@ export default function VerifyEmailForm() {
     }
 
     setIsResending(true)
+    setError(null)
     try {
       const response = await fetch(`${apiUrl}/api/auth/resend-verification`, {
         method: 'POST',
@@ -66,9 +84,9 @@ export default function VerifyEmailForm() {
         body: JSON.stringify({ email })
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to resend verification')
+      if (!response || !response.ok) {
+        const errorData = response?.json ? await response.json() : null
+        throw new Error(errorData?.detail || 'Failed to resend verification')
       }
 
       setStatus('resent')
@@ -81,8 +99,11 @@ export default function VerifyEmailForm() {
 
   if (status === 'verifying') {
     return (
-      <div className="w-full max-w-md mx-auto text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+      <div className="w-full max-w-md mx-auto text-center" role="status" aria-live="polite">
+        <div
+          className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"
+          aria-hidden="true"
+        ></div>
         <p className="mt-4 text-gray-600">Verifying your email address...</p>
       </div>
     )
@@ -165,7 +186,7 @@ export default function VerifyEmailForm() {
               <p>{error || 'The verification link is invalid or has expired.'}</p>
             </div>
             
-            {email && (
+            {canResend && (
               <div className="mt-4 space-y-3">
                 <div>
                   <label htmlFor="resend-email" className="block text-sm font-medium text-gray-700">
@@ -180,10 +201,10 @@ export default function VerifyEmailForm() {
                     placeholder="you@example.com"
                   />
                 </div>
-                
+
                 <button
                   onClick={resendVerification}
-                  disabled={isResending}
+                  disabled={isResending || !email.trim().length}
                   className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isResending ? 'Sending...' : 'Resend verification email'}
