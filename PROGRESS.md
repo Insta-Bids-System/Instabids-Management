@@ -47,14 +47,21 @@ Status: 80% Complete
 ```yaml
 Spec: COMPLETED ✅
 Plan: COMPLETED ✅
-Tasks: COMPLETED ✅ (96 tasks)
-Backend: IN PROGRESS (core CRUD foundation in API)
-Frontend: IN PROGRESS (multi-step wizard scaffolding live in Next.js)
-Database: NOT STARTED
-Status: 45% Complete (Backend foundation + wizard scaffolding underway)
+Tasks: IN PROGRESS (Phase 1 groundwork only; 0/96 tasks verified complete)
+Backend: IN PROGRESS (FastAPI CRUD endpoints and Supabase data access service)
+Frontend: NOT STARTED (no wizard, upload UI, or client flows yet)
+Database: PARTIAL (004 migration adds core tables; invitation/template automation outstanding)
+Status: 15% Complete (basic CRUD available, rest of workflow unbuilt)
 ```
 
-**Contractor Onboarding** 
+**Outstanding Focus Areas**
+- Media upload pipeline (storage bucket, signed URLs, completion tracking)
+- Project creation wizard UI and validation
+- Contractor matching algorithm and scoring rules
+- Invitation workflow and contractor notifications
+- SmartScope integration triggers and result handling
+
+**Contractor Onboarding**
 ```yaml
 Spec: COMPLETED ✅
 Plan: COMPLETED ✅
