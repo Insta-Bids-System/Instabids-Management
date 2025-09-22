@@ -6,16 +6,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from ..dependencies import get_current_user
-from ..models.smartscope import (
+from dependencies import get_current_user
+from models.smartscope import (
     AccuracyMetrics,
     AnalysisListResponse,
     AnalysisRequest,
     FeedbackRequest,
     SmartScopeAnalysis,
 )
-from ..models.user import User
-from ..services.smartscope_service import SmartScopeService
+from models.user import User
+from services.smartscope_service import SmartScopeService
 
 router = APIRouter(prefix="/smartscope", tags=["SmartScope AI"])
 

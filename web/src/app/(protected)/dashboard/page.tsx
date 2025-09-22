@@ -1,9 +1,23 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 
 export default function DashboardPage() {
   const { user, logout } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    // Redirect to appropriate dashboard based on user type
+    if (user) {
+      if (user.user_type === 'contractor') {
+        router.push('/contractor-dashboard')
+      } else if (user.user_type === 'property_manager') {
+        router.push('/pm-dashboard')
+      }
+    }
+  }, [user, router])
 
   return (
     <div className="min-h-screen bg-gray-50">

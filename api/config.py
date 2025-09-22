@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: Sequence[str] = Field(
-        default=("http://localhost:3000",), validation_alias="CORS_ORIGINS"
+        default=("http://localhost:3000", "http://localhost:3456"), validation_alias="CORS_ORIGINS"
     )
 
     # Rate Limiting

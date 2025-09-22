@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from ..config import settings
+from config import settings
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
