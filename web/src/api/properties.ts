@@ -1,9 +1,9 @@
-import { Property, PropertyFormData, PropertyFilters } from '../types/property';
-import { authenticatedFetch } from '../utils/api';
+import { Property, PropertyFormData, PropertyFilters } from '@/packages/shared/src/types/property';
+import { authenticatedFetch } from '@/utils/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Shared API functions for both web and mobile
+// Web-specific API functions using web project dependencies
 export const propertiesApi = {
   // Get all properties with optional filters
   async getProperties(filters?: PropertyFilters): Promise<Property[]> {
