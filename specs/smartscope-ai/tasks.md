@@ -9,6 +9,10 @@ _Last reviewed: updated after full code audit of `/api`, `/packages/shared`, `mi
 - **Cost monitoring helpers are written.** `api/services/cost_monitor.py` estimates token spend and can compile budget usage, but Supabase persistence for costs is missing.
 - **Automated coverage is limited to unit tests.** `api/tests/test_smartscope_service.py` exercises the vision service, service orchestration, cost monitor, and analytics with fake backends—no live Supabase or API tests.
 - **Schema and frontend gaps remain.** The shipped Supabase migration defines `smartscope_analyses`/`smartscope_feedback` tables whose shapes do not match the service payloads, there is no `smartscope_costs` table, no SmartScope UI in `web/`, and no project-creation automation.
+- **Cost monitoring helper remains Supabase-dependent.** `api/services/cost_monitor.py` estimates token spend and prepares payloads for the `smartscope_costs` table, but writes fail against the current schema because the table does not exist yet.
+- **Automated coverage is limited to unit tests.** `api/tests/test_smartscope_service.py` exercises the vision service, service orchestration, cost monitor, and analytics with fake backends—no live Supabase or API tests.
+- **Frontend and persistence gaps remain.** Because Supabase still uses the array-based schema from migration 004, real persistence fails; the backlog covers both schema alignment and the UI/automation layers (`web/` SmartScope surfaces and project triggers).
+- **Authorization and policies are missing.** SmartScope endpoints only enforce authentication; there are no organization-level checks in FastAPI or RLS policies in Supabase.
 
 ---
 
@@ -76,6 +80,36 @@ _Last reviewed: updated after full code audit of `/api`, `/packages/shared`, `mi
 - [ ] Update `README.md`/`PROGRESS.md` with the true SmartScope status once schema fixes land.
 - [ ] Write runbooks covering API key rotation, OpenAI quota monitoring, and Supabase incident response.
 - [ ] Provide onboarding docs for property managers/contractors explaining SmartScope workflows once the UI and automation are built.
+1. [ ] Write contract tests that snapshot SmartScope Python and TypeScript models to prevent request/response drift.
+2. [ ] Add contract tests confirming FastAPI responses match the Supabase payloads defined in the realigned migrations.
+3. [ ] Create contract tests validating SmartScope cost tracking payloads across the service layer and Supabase persistence.
+4. [x] Implement strict SmartScope Pydantic models (analysis, feedback, metadata) mirroring API payloads.
+5. [x] Mirror SmartScope contracts in `packages/shared/types/smartscope.ts` for frontend consumers.
+6. [x] Provide `SmartScopeAnalysisCreate` helper models to normalise payloads before persistence.
+7. [ ] Extend analysis metadata models to include image quality warnings for downstream UI consumers.
+8. [ ] Align the Supabase `smartscope_analyses` schema with FastAPI payloads (JSONB columns, removed project uniqueness, metadata columns, RLS).
+9. [ ] Align the Supabase `smartscope_feedback` schema with FastAPI payloads (user IDs, JSON corrections, supporting indexes, RLS).
+10. [ ] Create the `smartscope_costs` table with indexes and organization-aware RLS policies.
+11. [ ] Apply and verify `scripts/smartscope_seed.sql` once the schema is aligned to provide representative SmartScope fixtures. [P]
+12. [x] Implement baseline `OpenAIVisionService` with image preprocessing, prompt creation, and structured JSON parsing.
+13. [ ] Add retry/backoff and circuit-breaking to `OpenAIVisionService` for OpenAI/API failures.
+14. [ ] Implement image heuristics (blur/low-light detection) and surface warnings in analysis metadata.
+15. [ ] Add response caching or deduplication keyed by project/media context to avoid duplicate analyses. [P]
+16. [x] Implement `SmartScopeService` orchestrating analysis persistence, listing, feedback capture, and analytics aggregation.
+17. [ ] Enhance `SmartScopeService` to map Supabase errors to actionable HTTP responses with structured logging.
+18. [ ] Enforce organization-level authorization in `SmartScopeService` and replicate the logic in Supabase policies.
+19. [ ] Implement SmartScope update/approval endpoints capturing reviewer metadata and change history.
+20. [ ] Introduce asynchronous processing or document the synchronous guarantees plus add a status/polling endpoint.
+21. [ ] Surface cost telemetry and budget summaries via SmartScope analytics endpoints once persistence works.
+22. [x] Expose FastAPI routes for analyze, get, list, feedback, and accuracy metrics.
+23. [ ] Add cost/budget analytics endpoints and alert threshold management APIs.
+24. [ ] Trigger SmartScope automatically from project creation or media upload workflows.
+25. [ ] Integrate SmartScope outputs with contractor matching and quote validation services. [P]
+26. [ ] Document and implement failure compensation paths when AI analysis fails or exceeds SLAs.
+27. [ ] Build SmartScope web UI modules (analysis list, detail view, scope editor, feedback forms) with routing and state wiring.
+28. [ ] Implement frontend polling or realtime updates plus cost/confidence dashboards. [P]
+29. [ ] Add FastAPI integration tests using a Supabase test double to cover schema-aligned workflows.
+30. [ ] Add performance and resilience tests (OpenAI downtime, Supabase outages) and publish SmartScope operational runbooks.
 
 ---
 

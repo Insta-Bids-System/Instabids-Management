@@ -112,6 +112,7 @@ cd api && uvicorn main:app --reload
 - ✅ Contractor Onboarding Spec & Plan  
 - ✅ Quote Submission Spec & Plan
 - ✅ SmartScope AI Spec & Plan
+- ⏳ SmartScope Supabase alignment (schema realignment, cost table, RLS policies still pending)
 - ⏳ Project API Implementation
 - ⏳ Contractor Registration System
 - ⏳ Quote Collection Engine
