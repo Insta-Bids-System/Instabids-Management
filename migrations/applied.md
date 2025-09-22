@@ -19,6 +19,10 @@ URL: https://lmbpvkfcfhdfaihigfdu.supabase.co
 -- 006_ai_and_memory.sql
 -- Creates: property_memory, ai_agent_logs tables
 -- Status: NOT CREATED
+
+-- 005_smartscope_alignment.sql
+-- Aligns smartscope_analyses/feedback tables, creates smartscope_costs table, adds RLS policies
+-- Status: CREATED (PENDING APPLY)
 ```
 
 ### ✅ Applied Migrations

@@ -4,6 +4,27 @@
  */
 
 export const SMARTSCOPE_SEVERITIES = ["Emergency", "High", "Medium", "Low"] as const;
+export const SMARTSCOPE_SCOPE_ITEM_KEYS = [
+  "title",
+  "description",
+  "trade",
+  "materials",
+  "safety_notes",
+  "estimated_hours",
+] as const;
+export const SMARTSCOPE_MATERIAL_KEYS = [
+  "name",
+  "quantity",
+  "specifications",
+] as const;
+export const SMARTSCOPE_METADATA_KEYS = [
+  "processing_status",
+  "model_version",
+  "tokens_used",
+  "api_cost",
+  "processing_time_ms",
+  "requested_by",
+] as const;
 export type SmartScopeSeverity = typeof SMARTSCOPE_SEVERITIES[number];
 
 /**
@@ -65,6 +86,7 @@ export interface AnalysisMetadata {
   tokens_used?: number;
   api_cost?: number;
   processing_time_ms?: number;
+  requested_by?: string;
 }
 
 /**
