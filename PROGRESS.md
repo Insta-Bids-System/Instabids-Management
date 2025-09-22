@@ -87,11 +87,11 @@ Status: 25% Complete (Planning Done)
 ```yaml
 Spec: COMPLETED ✅
 Plan: NOT COMPLETED
-Tasks: IN PROGRESS (24 tasks)
-Backend: IN PROGRESS (analysis endpoints, feedback APIs, cost tracking)
+Tasks: IN PROGRESS (24 tasks – domain contracts and schema alignment completed)
+Backend: IN PROGRESS (analysis endpoints, feedback APIs, cost tracking with canonical metadata)
 AI Integration: IN PROGRESS (vision service, preprocessing, prompting)
-Database: IN PROGRESS (Supabase persistence + analytics)
-Status: 45% Complete (SmartScope pipeline foundations implemented)
+Database: IN PROGRESS (Supabase schema realigned, costs table + RLS in place, analytics pending)
+Status: 55% Complete (Schema, persistence, and metadata contracts aligned; UI/integration still open)
 ```
 
 ### ✅ Completed Recently
@@ -114,6 +114,7 @@ Status: 45% Complete (SmartScope pipeline foundations implemented)
 - [x] Updated README.md with marketplace focus
 - [x] Pushed all specifications to GitHub
 - [x] **DATABASE COMPLETE**: Applied 004_marketplace_core migration (12 tables)
+- [x] SmartScope Supabase alignment: added JSON-first schema, feedback fixes, cost tracking table, and RLS policies
 
 ### 🔄 In Progress Now
 - Implementing project creation backend API endpoints
