@@ -117,7 +117,6 @@ Status: 40% Complete (Core service logic exists, but database alignment, UI, and
 - [x] Updated README.md with marketplace focus
 - [x] Pushed all specifications to GitHub
 - [x] **DATABASE COMPLETE**: Applied 004_marketplace_core migration (12 tables)
-- [ ] SmartScope Supabase alignment: pending migration to add JSON payloads, feedback fixes, cost tracking table, and RLS policies
 
 ### 🔄 In Progress Now
 - Implementing project creation backend API endpoints
