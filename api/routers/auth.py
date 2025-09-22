@@ -35,7 +35,7 @@ def create_access_token(data: dict) -> str:
     )
     to_encode.update({"exp": expire, "type": "access"})
     return jwt.encode(
-        to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+        to_encode, settings.jwt_secret_key_value, algorithm=settings.jwt_algorithm
     )
 
 
@@ -45,7 +45,7 @@ def create_refresh_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(days=settings.jwt_refresh_token_expire_days)
     to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(
-        to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+        to_encode, settings.jwt_secret_key_value, algorithm=settings.jwt_algorithm
     )
 
 
@@ -56,7 +56,7 @@ async def get_current_user(
     token = credentials.credentials
     try:
         payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        token, settings.jwt_secret_key_value, algorithms=[settings.jwt_algorithm]
         )
         user_id = payload.get("sub")
         if user_id is None:
@@ -215,7 +215,7 @@ async def refresh_token(request: RefreshTokenRequest):
         # Decode refresh token
         payload = jwt.decode(
             request.refresh_token,
-            settings.jwt_secret_key,
+            settings.jwt_secret_key_value,
             algorithms=[settings.jwt_algorithm],
         )
 

@@ -28,14 +28,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting InstaBids Management API...")
     logger.info(f"Environment: {settings.api_env}")
-    logger.info(f"Supabase URL: {settings.supabase_url}")
+    logger.info(f"Supabase URL: {settings.supabase_url_value}")
 
     # Initialize Supabase connection
     try:
         supabase_service.force_reinitialize()
         _ = supabase_service.client
         logger.info("Supabase connection established")
-        logger.info(f"Service key available: {bool(settings.supabase_service_key)}")
+        logger.info(f"Service key available: {bool(settings.supabase_service_key_value)}")
     except Exception as e:
         logger.error(f"Failed to connect to Supabase: {e}")
         raise
@@ -57,7 +57,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=list(settings.cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

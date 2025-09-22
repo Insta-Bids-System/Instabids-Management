@@ -22,8 +22,8 @@ async def get_current_user(
     try:
         # Decode JWT token
         payload = jwt.decode(
-            token, 
-            settings.jwt_secret_key, 
+            token,
+            settings.jwt_secret_key_value,
             algorithms=[settings.jwt_algorithm]
         )
         

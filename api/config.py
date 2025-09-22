@@ -1,49 +1,121 @@
-import os
-from typing import List
+import json
+from typing import Sequence
 
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 
 class Settings(BaseSettings):
-    # Supabase - Use environment variables set in main.py
-    supabase_url: str = os.getenv("SUPABASE_URL", "https://lmbpvkfcfhdfaihigfdu.supabase.co")
-    supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
-    supabase_service_key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    """Application configuration sourced from the environment."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Supabase
+    supabase_url: AnyHttpUrl | None = Field(
+        default=None, validation_alias="SUPABASE_URL"
+    )
+    supabase_anon_key: SecretStr | None = Field(
+        default=None, validation_alias="SUPABASE_ANON_KEY"
+    )
+    supabase_service_key: SecretStr | None = Field(
+        default=None, validation_alias="SUPABASE_SERVICE_KEY"
+    )
 
     # API
-    api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    api_env: str = "development"
+    api_host: str = Field(default="0.0.0.0", validation_alias="API_HOST")
+    api_port: int = Field(default=8000, validation_alias="API_PORT")
+    api_env: str = Field(default="development", validation_alias="API_ENV")
 
     # JWT
-    jwt_secret_key: str = "dev-secret-key"
-    jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60
-    jwt_refresh_token_expire_days: int = 30
+    jwt_secret_key: SecretStr = Field(
+        default=SecretStr("dev-secret-key"), validation_alias="JWT_SECRET_KEY"
+    )
+    jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    jwt_access_token_expire_minutes: int = Field(
+        default=60, validation_alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
+    )
+    jwt_refresh_token_expire_days: int = Field(
+        default=30, validation_alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS"
+    )
 
     # CORS
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:3456"]
+    cors_origins: Sequence[str] = Field(
+        default=("http://localhost:3000", "http://localhost:3456"), validation_alias="CORS_ORIGINS"
+    )
 
     # Rate Limiting
-    rate_limit_requests: int = 100
-    rate_limit_period: int = 3600
+    rate_limit_requests: int = Field(
+        default=100, validation_alias="RATE_LIMIT_REQUESTS"
+    )
+    rate_limit_period: int = Field(default=3600, validation_alias="RATE_LIMIT_PERIOD")
 
     # OpenAI / SmartScope
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    smartscope_model: str = os.getenv("SMARTSCOPE_MODEL", "gpt-4.1-mini")
-    smartscope_max_output_tokens: int = int(
-        os.getenv("SMARTSCOPE_MAX_OUTPUT_TOKENS", "1200")
+    openai_api_key: SecretStr | None = Field(
+        default=None, validation_alias="OPENAI_API_KEY"
     )
-    smartscope_temperature: float = float(os.getenv("SMARTSCOPE_TEMPERATURE", "0.2"))
-    smartscope_confidence_threshold: float = float(
-        os.getenv("SMARTSCOPE_CONFIDENCE_THRESHOLD", "0.75")
+    smartscope_model: str = Field(
+        default="gpt-4.1-mini", validation_alias="SMARTSCOPE_MODEL"
+    )
+    smartscope_max_output_tokens: int = Field(
+        default=1200, validation_alias="SMARTSCOPE_MAX_OUTPUT_TOKENS"
+    )
+    smartscope_temperature: float = Field(
+        default=0.2, validation_alias="SMARTSCOPE_TEMPERATURE"
+    )
+    smartscope_confidence_threshold: float = Field(
+        default=0.75, validation_alias="SMARTSCOPE_CONFIDENCE_THRESHOLD"
     )
 
-    class Config:
-        env_file = ".env"
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def split_cors_origins(cls, value: object) -> Sequence[str]:
+        if isinstance(value, str):
+            if value.startswith("["):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return tuple(str(origin).strip() for origin in parsed if str(origin).strip())
+                except json.JSONDecodeError:
+                    pass
+            return tuple(origin.strip() for origin in value.split(",") if origin.strip())
+        if isinstance(value, (list, tuple)):
+            return tuple(value)
+        return ("http://localhost:3000",)
+
+    @property
+    def supabase_url_value(self) -> str | None:
+        return str(self.supabase_url) if self.supabase_url is not None else None
+
+    @property
+    def supabase_anon_key_value(self) -> str | None:
+        return (
+            self.supabase_anon_key.get_secret_value()
+            if self.supabase_anon_key is not None
+            else None
+        )
+
+    @property
+    def supabase_service_key_value(self) -> str | None:
+        return (
+            self.supabase_service_key.get_secret_value()
+            if self.supabase_service_key is not None
+            else None
+        )
+
+    @property
+    def jwt_secret_key_value(self) -> str:
+        return self.jwt_secret_key.get_secret_value()
+
+    @property
+    def openai_api_key_value(self) -> str | None:
+        return (
+            self.openai_api_key.get_secret_value()
+            if self.openai_api_key is not None
+            else None
+        )
 
 
 settings = Settings()
