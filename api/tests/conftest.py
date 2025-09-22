@@ -18,7 +18,7 @@ os.environ["SUPABASE_ANON_KEY"] = (
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["API_ENV"] = "testing"
 
-from main import app
+from api.main import app
 
 
 @pytest.fixture(scope="session")

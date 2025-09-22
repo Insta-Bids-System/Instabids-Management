@@ -249,7 +249,7 @@ class TestSupabaseIntegration:
 
     def test_supabase_connection_available(self):
         """Test that Supabase connection is available."""
-        from services.supabase import supabase_service
+        from api.services.supabase import supabase_service
 
         client = supabase_service.client
         assert client is not None
@@ -264,7 +264,7 @@ class TestSupabaseIntegration:
 
     def test_database_tables_accessible(self):
         """Test that required database tables are accessible."""
-        from services.supabase import supabase_service
+        from api.services.supabase import supabase_service
 
         required_tables = ["user_profiles", "organizations"]
 

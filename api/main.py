@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .middleware.rate_limit import rate_limit_middleware
-from .routers import auth, projects, properties, smartscope
+from .routers import auth, projects, properties, quotes, smartscope
 from .services.supabase import supabase_service
 
 # Configure logging
@@ -49,7 +49,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=list(settings.cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +79,12 @@ app.include_router(
     projects.router,
     prefix="/api",
     tags=["Projects"],
+)
+
+app.include_router(
+    quotes.router,
+    prefix="/api",
+    tags=["Quotes"],
 )
 
 app.include_router(

@@ -103,10 +103,11 @@ class OpenAIVisionService:
         client: Optional[AsyncOpenAI] = None,
         preprocessor: Optional[ImagePreprocessor] = None,
     ) -> None:
-        if client is None and not settings.openai_api_key:
+        api_key = settings.openai_api_key_value
+        if client is None and not api_key:
             raise ValueError("OPENAI_API_KEY is required for SmartScope analysis")
 
-        self.client = client or AsyncOpenAI(api_key=settings.openai_api_key)
+        self.client = client or AsyncOpenAI(api_key=api_key)
         self.preprocessor = preprocessor or ImagePreprocessor()
 
     async def analyse(self, request: AnalysisRequest) -> Dict[str, Any]:

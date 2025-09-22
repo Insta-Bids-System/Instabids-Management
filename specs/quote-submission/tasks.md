@@ -105,6 +105,7 @@ quote_files (id, quote_id, file_path, file_type, file_size)
 - **Estimated Time**: 6 hours
 - **Dependencies**: Form validation schemas
 - **Testing**: Form validation, draft persistence, mobile compatibility
+- **Status**: ✅ Implemented FastAPI endpoint (`POST /api/quotes/submit/form`) persisting submissions to Supabase with draft handling, structured validation, and automated confidence scoring.
 
 ### 2.2 OCR and Text Extraction Services
 
