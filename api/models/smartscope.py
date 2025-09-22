@@ -9,11 +9,30 @@ from uuid import UUID
 from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, field_validator, ConfigDict
 
 
-SMARTSCOPE_SEVERITIES = {"Emergency", "High", "Medium", "Low"}
+SMARTSCOPE_SEVERITIES = ("Emergency", "High", "Medium", "Low")
+SMARTSCOPE_SCOPE_ITEM_FIELDS = (
+    "title",
+    "description",
+    "trade",
+    "materials",
+    "safety_notes",
+    "estimated_hours",
+)
+SMARTSCOPE_MATERIAL_FIELDS = ("name", "quantity", "specifications")
+SMARTSCOPE_METADATA_FIELDS = (
+    "processing_status",
+    "model_version",
+    "tokens_used",
+    "api_cost",
+    "processing_time_ms",
+    "requested_by",
+)
 
 
 class ScopeItem(BaseModel):
     """Represents a single actionable scope item returned by the AI."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     title: str = Field(..., description="Human readable title summarising the work")
     description: str = Field(..., description="Detailed set of instructions for contractors")
@@ -35,6 +54,8 @@ class ScopeItem(BaseModel):
 class MaterialItem(BaseModel):
     """Structured material requirements for the analysis."""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     name: str
     quantity: Optional[str] = None
     specifications: Optional[str] = Field(
@@ -44,6 +65,8 @@ class MaterialItem(BaseModel):
 
 class AnalysisRequest(BaseModel):
     """Payload required to trigger a SmartScope AI analysis run."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     project_id: UUID
     photo_urls: List[AnyHttpUrl]
@@ -68,17 +91,20 @@ class AnalysisRequest(BaseModel):
 class AnalysisMetadata(BaseModel):
     """Additional metadata captured during processing."""
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     processing_status: str = Field(default="pending")
     model_version: str
     tokens_used: Optional[int] = None
     api_cost: Optional[float] = None
     processing_time_ms: Optional[int] = None
+    requested_by: Optional[UUID] = None
 
 
 class SmartScopeAnalysis(BaseModel):
     """Represents a SmartScope analysis record returned to clients."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     id: UUID
     project_id: UUID
@@ -111,6 +137,8 @@ class SmartScopeAnalysis(BaseModel):
 class SmartScopeAnalysisCreate(BaseModel):
     """Internal helper model when persisting new analysis records."""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     project_id: UUID
     photo_urls: List[str]
     primary_issue: str
@@ -129,6 +157,8 @@ class SmartScopeAnalysisCreate(BaseModel):
 class FeedbackRequest(BaseModel):
     """Feedback payload submitted by property managers or contractors."""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     feedback_type: str
     accuracy_rating: int = Field(ge=1, le=5)
     scope_corrections: Dict[str, Any] = Field(default_factory=dict)
@@ -139,6 +169,8 @@ class FeedbackRequest(BaseModel):
 
 class FeedbackRecord(BaseModel):
     """Feedback record stored in the database."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     id: UUID
     analysis_id: UUID
@@ -155,6 +187,8 @@ class FeedbackRecord(BaseModel):
 class AccuracyMetrics(BaseModel):
     """Aggregated analytics for SmartScope performance dashboards."""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     total_analyses: int
     average_confidence: float
     average_accuracy_rating: Optional[float]
@@ -166,9 +200,29 @@ class AccuracyMetrics(BaseModel):
 class AnalysisListResponse(BaseModel):
     """Paginated listing of SmartScope analyses."""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     analyses: List[SmartScopeAnalysis]
     total: int
     page: int
     per_page: int
     has_next: bool
     has_prev: bool
+
+
+__all__ = [
+    "SMARTSCOPE_SEVERITIES",
+    "SMARTSCOPE_SCOPE_ITEM_FIELDS",
+    "SMARTSCOPE_MATERIAL_FIELDS",
+    "SMARTSCOPE_METADATA_FIELDS",
+    "ScopeItem",
+    "MaterialItem",
+    "AnalysisRequest",
+    "AnalysisMetadata",
+    "SmartScopeAnalysis",
+    "SmartScopeAnalysisCreate",
+    "FeedbackRequest",
+    "FeedbackRecord",
+    "AccuracyMetrics",
+    "AnalysisListResponse",
+]
