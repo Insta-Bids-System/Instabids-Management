@@ -1,7 +1,8 @@
 'use client';
 
-import { Property } from '@/packages/shared/types/property';
+import { Property } from '@/packages/shared/src/types/property';
 import { Home, MapPin, Bed, Bath, Square } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface PropertyCardProps {
   property: Property;
@@ -9,16 +10,36 @@ interface PropertyCardProps {
 }
 
 export default function PropertyCard({ property, onClick }: PropertyCardProps) {
+  const router = useRouter();
+  
   const formatPropertyType = (type: string) => {
     return type.split('_').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1)
     ).join(' ');
   };
 
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick();
+    } else {
+      router.push(`/properties/${property.id}`);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/properties/${property.id}/edit`);
+  };
+
+  const handleViewProjects = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/projects?property=${property.id}`);
+  };
+
   return (
     <div
       className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-      onClick={onClick}
+      onClick={handleCardClick}
     >
       {/* Property Type Badge */}
       <div className="flex items-center justify-between mb-4">
@@ -72,19 +93,13 @@ export default function PropertyCard({ property, onClick }: PropertyCardProps) {
       <div className="mt-4 flex gap-2">
         <button
           className="flex-1 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: Handle edit
-          }}
+          onClick={handleEdit}
         >
           Edit
         </button>
         <button
           className="flex-1 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 rounded hover:bg-gray-100 transition"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: Handle view projects
-          }}
+          onClick={handleViewProjects}
         >
           Projects
         </button>
