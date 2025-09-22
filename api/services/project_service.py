@@ -9,15 +9,15 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from supabase import Client
 
-from ..models.project import (
+from models.project import (
     Project,
     ProjectCreate,
     ProjectFilter,
     ProjectStatus,
     ProjectUpdate,
 )
-from ..models.user import User
-from .supabase import supabase_service
+from models.user import User
+from services.supabase import supabase_service
 
 
 class ProjectService:

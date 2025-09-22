@@ -7,9 +7,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from datetime import datetime
 
-from .config import settings
-from .models.user import User
-from .services.supabase import supabase_service
+from config import settings
+from models.user import User
+from services.supabase import supabase_service
 
 security = HTTPBearer()
 

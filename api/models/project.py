@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, root_validator, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class ProjectCategory(str, Enum):
@@ -65,7 +65,7 @@ class VirtualAccessInfo(BaseModel):
     onsite_contact_name: Optional[str] = Field(None, max_length=255)
     onsite_contact_phone: Optional[str] = Field(
         None,
-        regex=r"^\+?1?\d{9,15}$",
+        pattern=r"^\+?1?\d{9,15}$",
         description="International E.164 formatted phone number",
     )
     parking_instructions: Optional[str] = Field(None, max_length=500)
@@ -99,7 +99,8 @@ class ProjectBase(BaseModel):
     location_details: Optional[str] = Field(None, max_length=500)
     special_conditions: Optional[str] = Field(None, max_length=1000)
 
-    @validator("bid_deadline")
+    @field_validator("bid_deadline")
+    @classmethod
     def validate_bid_deadline(cls, value: datetime) -> datetime:
         now = datetime.utcnow()
         if value <= now:
@@ -109,17 +110,18 @@ class ProjectBase(BaseModel):
             raise ValueError("Bid deadline cannot be more than 7 days out")
         return value
 
-    @validator("preferred_start_date", "completion_deadline", pre=True)
+    @field_validator("preferred_start_date", "completion_deadline", mode="before")
+    @classmethod
     def parse_dates(cls, value):
         if isinstance(value, str):
             return date.fromisoformat(value)
         return value
 
-    @root_validator
-    def validate_dates(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        preferred_start = values.get("preferred_start_date")
-        completion = values.get("completion_deadline")
-        bid_deadline = values.get("bid_deadline")
+    @model_validator(mode="after")
+    def validate_dates(self) -> 'ProjectBase':
+        preferred_start = self.preferred_start_date
+        completion = self.completion_deadline
+        bid_deadline = self.bid_deadline
 
         if preferred_start and preferred_start < datetime.utcnow().date():
             raise ValueError("Preferred start date cannot be in the past")
@@ -127,15 +129,15 @@ class ProjectBase(BaseModel):
         if completion and preferred_start and completion < preferred_start:
             raise ValueError("Completion deadline must be after start date")
 
-        if preferred_start and bid_deadline.date() > preferred_start:
+        if preferred_start and bid_deadline and bid_deadline.date() > preferred_start:
             raise ValueError("Bid deadline must be on or before preferred start date")
 
-        budget_min = values.get("budget_min")
-        budget_max = values.get("budget_max")
+        budget_min = self.budget_min
+        budget_max = self.budget_max
         if budget_min is not None and budget_max is not None and budget_min > budget_max:
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
-        return values
+        return self
 
 
 class ProjectCreate(ProjectBase):
@@ -170,7 +172,8 @@ class ProjectUpdate(BaseModel):
     special_conditions: Optional[str] = Field(None, max_length=1000)
     status: Optional[ProjectStatus] = None
 
-    @validator("bid_deadline")
+    @field_validator("bid_deadline")
+    @classmethod
     def validate_optional_deadline(cls, value: datetime) -> datetime:
         if value <= datetime.utcnow():
             raise ValueError("Bid deadline must be in the future")
@@ -179,20 +182,20 @@ class ProjectUpdate(BaseModel):
             raise ValueError("Bid deadline cannot be more than 7 days out")
         return value
 
-    @root_validator
-    def validate_budget_and_dates(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        budget_min = values.get("budget_min")
-        budget_max = values.get("budget_max")
+    @model_validator(mode="after")
+    def validate_budget_and_dates(self) -> 'ProjectUpdate':
+        budget_min = self.budget_min
+        budget_max = self.budget_max
         if budget_min is not None and budget_max is not None and budget_min > budget_max:
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
-        preferred_start = values.get("preferred_start_date")
-        completion = values.get("completion_deadline")
+        preferred_start = self.preferred_start_date
+        completion = self.completion_deadline
         if preferred_start and preferred_start < datetime.utcnow().date():
             raise ValueError("Preferred start date cannot be in the past")
         if completion and preferred_start and completion < preferred_start:
             raise ValueError("Completion deadline must be after start date")
-        return values
+        return self
 
 
 class Project(BaseModel):

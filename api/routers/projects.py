@@ -5,8 +5,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from ..dependencies import get_current_user
-from ..models.project import (
+from dependencies import get_current_user
+from models.project import (
     Project,
     ProjectCreate,
     ProjectFilter,
@@ -14,8 +14,8 @@ from ..models.project import (
     ProjectStatusUpdate,
     ProjectUpdate,
 )
-from ..models.user import User
-from ..services.project_service import ProjectService
+from models.user import User
+from services.project_service import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
