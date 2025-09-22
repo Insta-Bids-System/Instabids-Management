@@ -17,6 +17,7 @@ from models.smartscope import (
     AnalysisRequest,
     FeedbackRecord,
     FeedbackRequest,
+    SMARTSCOPE_METADATA_FIELDS,
     SmartScopeAnalysis,
     SmartScopeAnalysisCreate,
 )
@@ -53,6 +54,10 @@ class SmartScopeService:
 
         raw_payload = vision_result.get("raw_response", {})
 
+        metadata_payload = self._filter_metadata(metadata_dict)
+        metadata_payload["requested_by"] = str(current_user.id)
+        processing_status = metadata_payload.get("processing_status", "completed")
+
         record = SmartScopeAnalysisCreate(
             project_id=payload.project_id,
             photo_urls=[str(url) for url in payload.photo_urls],
@@ -69,7 +74,7 @@ class SmartScopeService:
                 "response": raw_payload,
                 "metadata": metadata_dict,
             },
-            metadata={**metadata_dict, "requested_by": str(current_user.id)},
+            metadata=metadata_payload,
         )
 
         insert_payload = {
@@ -85,7 +90,8 @@ class SmartScopeService:
             "additional_observations": record.additional_observations,
             "confidence_score": record.confidence_score,
             "openai_response_raw": record.openai_response_raw,
-            "processing_status": metadata_dict.get("processing_status", "completed"),
+            "metadata": metadata_payload,
+            "processing_status": processing_status,
         }
 
         try:
@@ -104,10 +110,10 @@ class SmartScopeService:
             )
 
         record_id = UUID(result.data[0]["id"])
-        await self._track_costs(record_id, metadata_dict)
+        await self._track_costs(record_id, metadata_payload)
         logger.info("SmartScope analysis %s created", record_id)
 
-        return self._build_analysis_from_record(result.data[0], metadata_dict)
+        return self._build_analysis_from_record(result.data[0], metadata_payload)
 
     async def get_analysis(self, analysis_id: UUID) -> SmartScopeAnalysis:
         result = (
@@ -247,7 +253,12 @@ class SmartScopeService:
         if tokens_used is None:
             return
         approximate_cost = self.cost_monitor.estimate_cost(tokens_used)
-        await self.cost_monitor.track_analysis_cost(str(analysis_id), approximate_cost, tokens_used)
+        await self.cost_monitor.track_analysis_cost(
+            str(analysis_id),
+            approximate_cost,
+            tokens_used,
+            metadata.get("processing_time_ms"),
+        )
 
     @staticmethod
     def _build_analysis_from_record(
@@ -255,6 +266,15 @@ class SmartScopeService:
     ) -> SmartScopeAnalysis:
         created_at = datetime.fromisoformat(record["created_at"]) if isinstance(record.get("created_at"), str) else record.get("created_at")
         updated_at = datetime.fromisoformat(record["updated_at"]) if isinstance(record.get("updated_at"), str) else record.get("updated_at")
+        metadata_model = AnalysisMetadata(
+            processing_status=metadata.get("processing_status", record.get("processing_status", "completed")),
+            model_version=str(metadata.get("model_version", "unknown")),
+            tokens_used=metadata.get("tokens_used"),
+            api_cost=metadata.get("api_cost"),
+            processing_time_ms=metadata.get("processing_time_ms"),
+            requested_by=UUID(metadata.get("requested_by")) if metadata.get("requested_by") else None,
+        )
+
         return SmartScopeAnalysis(
             id=UUID(record["id"]),
             project_id=UUID(record["project_id"]),
@@ -269,23 +289,45 @@ class SmartScopeService:
             additional_observations=record.get("additional_observations", []),
             confidence_score=float(record.get("confidence_score") or 0.0),
             openai_response_raw=record.get("openai_response_raw", {}),
-            metadata=AnalysisMetadata(
-                processing_status=record.get("processing_status", "completed"),
-                model_version=metadata.get("model_version", "unknown"),
-                tokens_used=metadata.get("tokens_used"),
-                api_cost=metadata.get("api_cost"),
-                processing_time_ms=metadata.get("processing_time_ms"),
-            ),
+            metadata=metadata_model,
             created_at=created_at,
             updated_at=updated_at or created_at,
         )
 
     @staticmethod
     def _extract_metadata(record: Dict[str, Any]) -> Dict[str, Any]:
+        combined: Dict[str, Any] = {}
+        metadata_column = record.get("metadata")
+        if isinstance(metadata_column, dict):
+            combined.update(metadata_column)
+
         raw = record.get("openai_response_raw") or {}
-        if isinstance(raw, dict) and "metadata" in raw:
-            return raw.get("metadata", {})
-        return {}
+        if isinstance(raw, dict):
+            metadata_raw = raw.get("metadata")
+            if isinstance(metadata_raw, dict):
+                combined = {**metadata_raw, **combined}
+
+        filtered: Dict[str, Any] = {}
+        for key in SMARTSCOPE_METADATA_FIELDS:
+            if combined.get(key) is not None:
+                filtered[key] = combined.get(key)
+
+        if "processing_status" not in filtered:
+            filtered["processing_status"] = record.get("processing_status", "completed")
+        if "model_version" not in filtered:
+            filtered["model_version"] = combined.get("model_version", "unknown")
+        return filtered
+
+    @staticmethod
+    def _filter_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        filtered: Dict[str, Any] = {}
+        for key in SMARTSCOPE_METADATA_FIELDS:
+            if metadata.get(key) is not None:
+                filtered[key] = metadata.get(key)
+
+        filtered.setdefault("processing_status", metadata.get("processing_status", "completed"))
+        filtered.setdefault("model_version", metadata.get("model_version", "unknown"))
+        return filtered
 
 
 __all__ = ["SmartScopeService"]
