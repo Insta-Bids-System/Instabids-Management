@@ -95,6 +95,8 @@ Status: 45% Complete (SmartScope pipeline foundations implemented)
 ```
 
 ### ✅ Completed Recently
+**Platform & DevOps (Week 3):**
+- [x] Authored Supabase infrastructure bootstrap guide and automation script for storage buckets/webhook-ready Edge Functions.
 **Foundation Work (Week 1):**
 - [x] Created project structure & documentation framework
 - [x] CLAUDE.md context file

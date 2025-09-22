@@ -22,26 +22,25 @@ class SupabaseService:
     def __init__(self):
         if (
             self._client is None
-            and settings.supabase_url
-            and settings.supabase_anon_key
+            and settings.supabase_url_value
+            and settings.supabase_anon_key_value
         ):
             self._initialize_clients()
 
     def _initialize_clients(self):
         """Initialize Supabase clients"""
         try:
-            if not settings.supabase_url or not settings.supabase_anon_key:
+            url = settings.supabase_url_value
+            anon_key = settings.supabase_anon_key_value
+            if not url or not anon_key:
                 raise ValueError("Supabase configuration missing")
             # Public client (uses anon key)
-            self._client = create_client(
-                settings.supabase_url, settings.supabase_anon_key
-            )
+            self._client = create_client(url, anon_key)
 
             # Service client (uses service key) - for admin operations
-            if settings.supabase_service_key:
-                self._service_client = create_client(
-                    settings.supabase_url, settings.supabase_service_key
-                )
+            service_key = settings.supabase_service_key_value
+            if service_key:
+                self._service_client = create_client(url, service_key)
             logger.info(
                 f"Supabase clients initialized successfully for {settings.supabase_url}"
             )
@@ -59,7 +58,10 @@ class SupabaseService:
     def client(self) -> Client:
         """Get the public Supabase client"""
         if self._client is None:
-            if not settings.supabase_url or not settings.supabase_anon_key:
+            if (
+                not settings.supabase_url_value
+                or not settings.supabase_anon_key_value
+            ):
                 raise ValueError("Supabase configuration missing")
             self._initialize_clients()
         return self._client
@@ -68,7 +70,10 @@ class SupabaseService:
     def service_client(self) -> Client:
         """Get the service Supabase client (admin operations)"""
         if self._service_client is None:
-            if not settings.supabase_url or not settings.supabase_service_key:
+            if (
+                not settings.supabase_url_value
+                or not settings.supabase_service_key_value
+            ):
                 raise ValueError("Supabase service configuration missing")
             self._initialize_clients()
         return self._service_client
