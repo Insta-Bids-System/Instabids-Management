@@ -13,17 +13,33 @@ pip install -r requirements.txt
 
 ### 2. Environment Variables
 
-Copy `.env.example` to `.env` and update with your values:
+**Local development**
 
-```bash
-cp ../.env.example .env
-```
+1. Copy the sample environment file and update the placeholders with your values:
+
+   ```bash
+   cp ../.env.example .env
+   ```
+
+2. Populate the `.env` file with the credentials provisioned in Supabase and OpenAI. The service key should never be shared outside trusted team members.
+
+**Production / staging**
+
+- Do **not** copy the `.env` file. Instead, inject the variables below via your platform's secret manager (e.g. Vercel/Render secrets, GitHub Actions, AWS Parameter Store).
+- Ensure the Supabase service role key is stored with restricted access and rotated regularly.
+- Provide the OpenAI API key only in environments where SmartScope is enabled.
 
 Required variables:
-- `SUPABASE_URL`: Your Supabase project URL
-- `SUPABASE_ANON_KEY`: Supabase anonymous key
-- `SUPABASE_SERVICE_KEY`: Supabase service key (admin operations)
-- `JWT_SECRET_KEY`: Secret key for JWT tokens (generate a secure one)
+- `SUPABASE_URL`: Supabase project URL
+- `SUPABASE_ANON_KEY`: Supabase anonymous key for public client operations
+- `SUPABASE_SERVICE_KEY`: Supabase service role key for admin operations
+- `JWT_SECRET_KEY`: Secret used to sign API tokens
+- `OPENAI_API_KEY`: Enables SmartScope analyses (required where the feature is active)
+
+Optional overrides:
+- `CORS_ORIGINS`: Comma-separated or JSON list of allowed origins
+- `SMARTSCOPE_MODEL`, `SMARTSCOPE_MAX_OUTPUT_TOKENS`, `SMARTSCOPE_TEMPERATURE`, `SMARTSCOPE_CONFIDENCE_THRESHOLD`
+- `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_PERIOD`
 
 ### 3. Run the API
 
