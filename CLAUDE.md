@@ -27,8 +27,13 @@ InstaBids-Management/
 │   ├── TECH_STACK.md    # Technology decisions
 │   └── ROADMAP.md       # 12-week plan
 ├── specs/               # Feature specifications
-├── migrations/          # Database migrations
-│   └── applied.md      # Track what's in Supabase
+├── migrations/          # Database documentation & future changes
+│   ├── DATABASE_COMPLETE.md  # Master database reference
+│   ├── TABLES_DETAILED.md    # Every column detail
+│   ├── API_EXAMPLES.md       # API patterns
+│   ├── TRIGGERS_FUNCTIONS.md # DB automation
+│   ├── future/          # New migrations go here
+│   └── archived_migrations/  # Old applied migrations
 ├── web/                 # Next.js web application
 │   └── src/components/  # Web-specific UI components
 ├── mobile/              # React Native Expo app
@@ -41,12 +46,13 @@ InstaBids-Management/
 └── tests/             # Test suites
 ```
 
-## 🏗️ Current Sprint (Week 1)
-**Focus**: Authentication & Property Management
+## 🏗️ Current Sprint (Week 2)
+**Focus**: Database Documentation & Property Management
 **Features**:
 1. User Authentication [95% COMPLETE] ✅ PRODUCTION READY
-2. Property Management [40% COMPLETE]
-3. Project Creation [NOT STARTED]
+2. Database Documentation [100% COMPLETE] ✅
+3. Property Management [40% COMPLETE]
+4. Project Creation [NOT STARTED]
 
 ## ✅ Completed Features
 - [x] **User Authentication System** - PRODUCTION READY
@@ -60,9 +66,16 @@ InstaBids-Management/
   - [x] All critical errors fixed (20+ issues resolved)
   - [x] Production deployment ready
 
+- [x] **Database Documentation** - COMPLETE
+  - [x] Complete schema documentation (21 tables)
+  - [x] API examples for all operations
+  - [x] Triggers and functions documented
+  - [x] Migration files reorganized
+  - [x] Agent-friendly reference created
+
 ## 🔄 In Progress
   
-- [x] Property Management System
+- [ ] Property Management System
   - [x] Spec created: `specs/property-management/spec.md`
   - [x] Plan created: `specs/property-management/plan.md`
   - [x] Tasks generated: `specs/property-management/tasks.md` (136 tasks)
@@ -72,13 +85,13 @@ InstaBids-Management/
   - [ ] Testing & documentation
 
 ## 📊 Database Status
-**Schema Version**: 0.0.3
-**Last Migration Applied**: 002_auth_extensions (2025-01-17)
-**Next Migration**: 003_property_management (READY)
-**Tables Created**: 9 tables (organizations, user_profiles, properties, auth tables)
-**Pending Tables**: property_groups, property_group_members, property_audit_log
+**Documentation**: Complete reference in `migrations/` folder
+**Tables**: 21 tables fully documented
+**Enums**: 11 custom types with 70+ values
+**Relationships**: 35 foreign keys documented
+**API Patterns**: Complete examples for all operations
 
-See `migrations/applied.md` for what's in production
+For agents: Use `migrations/DATABASE_COMPLETE.md` as master reference
 
 ## 🔧 Development Environment
 ```bash
@@ -103,19 +116,18 @@ cd api && uvicorn main:app --reload # http://localhost:8000
 5. **Mobile First**: React Native from day 1
 
 ## 🚀 Next Actions
-1. Apply 003_property_management migration to Supabase
-2. Build property management frontend components
-3. Create property list and detail pages
-4. Implement property import/export UI
-5. Test property API endpoints
-6. Begin project creation feature
+1. Build property management frontend components
+2. Create property list and detail pages
+3. Implement property import/export UI
+4. Test property API endpoints
+5. Begin project creation feature
 
 ## 📝 How to Resume Work
 
 When starting a new chat session:
-1. I'll read this CLAUDE.md first
-2. Check PROGRESS.md for current sprint
-3. Look at migrations/applied.md for DB state
+1. Read this CLAUDE.md first
+2. Check migrations/DATABASE_COMPLETE.md for DB schema
+3. Review PROGRESS.md for current sprint
 4. Continue from "Next Actions"
 
 ## 🔗 Important Links
@@ -140,5 +152,5 @@ When starting a new chat session:
 - Keep this file under 200 lines
 
 ---
-Last Updated: 2025-01-18
+Last Updated: 2025-01-22
 Current Week: 2 of 12
