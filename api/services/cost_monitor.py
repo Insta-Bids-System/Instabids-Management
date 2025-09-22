@@ -32,7 +32,11 @@ class CostMonitor:
         return round(tokens_used * TOKEN_COST_USD, 4)
 
     async def track_analysis_cost(
-        self, analysis_id: str, cost: float, tokens_used: Optional[int]
+        self,
+        analysis_id: str,
+        cost: float,
+        tokens_used: Optional[int],
+        processing_time_ms: Optional[int] = None,
     ) -> None:
         if not self.supabase:
             logger.debug("Supabase client missing; skipping cost tracking")
@@ -42,7 +46,7 @@ class CostMonitor:
             "analysis_id": analysis_id,
             "api_cost": float(cost),
             "tokens_used": int(tokens_used or 0),
-            "processing_time_ms": None,
+            "processing_time_ms": processing_time_ms,
         }
 
         try:

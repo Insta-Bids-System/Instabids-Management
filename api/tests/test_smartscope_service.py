@@ -187,6 +187,7 @@ class FakeVisionService:
                 "model_version": "test",
                 "processing_status": "completed",
                 "tokens_used": 200,
+                "processing_time_ms": 3200,
             },
             "raw_response": {"ok": True},
         }
@@ -200,9 +201,13 @@ class FakeCostMonitor:
         return 0.01 * tokens_used / 100
 
     async def track_analysis_cost(
-        self, analysis_id: str, cost: float, tokens_used: int | None
+        self,
+        analysis_id: str,
+        cost: float,
+        tokens_used: int | None,
+        processing_time_ms: int | None = None,
     ) -> None:
-        self.records.append((analysis_id, cost, tokens_used))
+        self.records.append((analysis_id, cost, tokens_used, processing_time_ms))
 
 
 @pytest.mark.asyncio
@@ -272,6 +277,9 @@ async def test_smartscope_service_processes_and_persists_analysis() -> None:
     assert analysis.primary_issue == "Leaking trap"
     assert analysis.severity == "High"
     assert analysis.confidence_score == pytest.approx(0.91)
+    assert analysis.metadata.tokens_used == 200
+    assert analysis.metadata.processing_time_ms == 3200
+    assert analysis.metadata.requested_by == user.id
     assert supabase.storage["smartscope_analyses"], "Analysis should be stored"
 
 
