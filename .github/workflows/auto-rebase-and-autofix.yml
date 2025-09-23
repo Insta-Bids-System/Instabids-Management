@@ -74,16 +74,25 @@ jobs:
           python - <<'PY'
           import re, subprocess, pathlib
           sh=lambda c: subprocess.run(c, shell=True, check=False)
+          fixed_files = []
+          
           # Markdown: union (drop markers)
           for p in pathlib.Path('.').rglob('*.md'):
               t=p.read_text(errors='ignore')
               if '<<<<<<<' in t and '>>>>>>>' in t:
                   t=re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n','',t,flags=re.M)
                   p.write_text(t); sh(f"git add {p}")
+                  fixed_files.append(str(p))
+                  print(f"AUTO-FIXED (markdown union): {p}")
+          
           # Lockfiles: prefer ours
           for n in ['package-lock.json','yarn.lock','pnpm-lock.yaml','poetry.lock']:
               p=pathlib.Path(n)
-              if p.exists(): sh(f"git checkout --ours {n} && git add {n}")
+              if p.exists() and sh(f"git ls-files -u {n}").returncode == 0: 
+                  sh(f"git checkout --ours {n} && git add {n}")
+                  fixed_files.append(n)
+                  print(f"AUTO-FIXED (lockfile): {n}")
+          
           # Python: union/dedupe imports, dedupe include_router blocks
           CON=re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
           def dedupe(xs):
@@ -124,6 +133,13 @@ jobs:
                   new=CON.sub(repl,t)
                   if new!=t:
                       p.write_text(new); sh(f"git add {p}")
+                      fixed_files.append(str(p))
+                      print(f"AUTO-FIXED (python imports/routers): {p}")
+          
+          if fixed_files:
+              print(f"\n✅ Auto-fixed {len(fixed_files)} file(s):")
+              for f in fixed_files:
+                  print(f"  - {f}")
           PY
 
       - name: Continue rebase if possible
@@ -133,6 +149,7 @@ jobs:
         id: conf
         run: |
           git ls-files -u | cut -f2 | sort -u > /tmp/conflicts || true
+          echo "Files still in conflict:"
           cat /tmp/conflicts || true
           echo "count=$(wc -l < /tmp/conflicts | tr -d ' ')" >> $GITHUB_OUTPUT
 
@@ -263,12 +280,7 @@ jobs:
       group: autofix-pr-${{ github.event.issue.number }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-        with: 
-          fetch-depth: 0
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - name: Get PR info
+      - name: Get PR info first
         id: pr
         uses: actions/github-script@v7
         with:
@@ -280,32 +292,62 @@ jobs:
             });
             core.setOutput('number', pr.number);
             core.setOutput('ref', pr.head.ref);
+            core.setOutput('repo', pr.head.repo.full_name);
+            console.log(`Working on PR #${pr.number}, branch: ${pr.head.ref}`);
+
+      - uses: actions/checkout@v4
+        with: 
+          repository: ${{ steps.pr.outputs.repo }}
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Configure bot & fetch
         run: |
           git config user.name  "autorebase-bot"
           git config user.email "autorebase-bot@users.noreply.github.com"
           git config rerere.enabled true
-          git fetch origin "${{ steps.pr.outputs.ref }}"
-          git checkout "${{ steps.pr.outputs.ref }}"
+          echo "Current branch: $(git branch --show-current)"
           git fetch origin main
 
       - name: Rebase
-        run: git rebase origin/main || true
+        run: |
+          echo "Rebasing $(git branch --show-current) onto origin/main"
+          git rebase origin/main || true
 
       - name: Autofix common conflicts (same as above)
         run: |
           python - <<'PY'
           import re, subprocess, pathlib
-          sh=lambda c: subprocess.run(c, shell=True, check=False)
+          sh=lambda c: subprocess.run(c, shell=True, check=False, capture_output=True, text=True)
+          fixed_files = []
+          
+          # Get list of conflicted files first
+          result = sh("git ls-files -u | cut -f2 | sort -u")
+          initial_conflicts = result.stdout.strip().split('\n') if result.stdout.strip() else []
+          if initial_conflicts:
+              print(f"Initial conflicts detected in {len(initial_conflicts)} file(s):")
+              for f in initial_conflicts:
+                  print(f"  - {f}")
+          
+          # Markdown: union (drop markers)
           for p in pathlib.Path('.').rglob('*.md'):
               t=p.read_text(errors='ignore')
               if '<<<<<<<' in t and '>>>>>>>' in t:
                   t=re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n','',t,flags=re.M)
                   p.write_text(t); sh(f"git add {p}")
+                  fixed_files.append(str(p))
+                  print(f"AUTO-FIXED (markdown union): {p}")
+          
+          # Lockfiles: prefer ours
           for n in ['package-lock.json','yarn.lock','pnpm-lock.yaml','poetry.lock']:
               p=pathlib.Path(n)
-              if p.exists(): sh(f"git checkout --ours {n} && git add {n}")
+              if p.exists() and str(p) in initial_conflicts: 
+                  sh(f"git checkout --ours {n} && git add {n}")
+                  fixed_files.append(n)
+                  print(f"AUTO-FIXED (lockfile): {n}")
+          
+          # Python: union/dedupe imports, dedupe include_router blocks
           CON=re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
           def dedupe(xs):
               out=[]; seen=set()
@@ -345,6 +387,50 @@ jobs:
                   new=CON.sub(repl,t)
                   if new!=t:
                       p.write_text(new); sh(f"git add {p}")
+                      fixed_files.append(str(p))
+                      print(f"AUTO-FIXED (python imports/routers): {p}")
+          
+          # SQL: Simple endings like COMMIT; or ON CONFLICT DO NOTHING;
+          for p in pathlib.Path('.').rglob('*.sql'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  # Check for simple ending conflicts
+                  if 'COMMIT;' in t or 'ON CONFLICT DO NOTHING;' in t:
+                      lines = t.splitlines()
+                      new_lines = []
+                      skip_until_end = False
+                      for line in lines:
+                          if line.startswith('<<<<<<<') and any(x in '\n'.join(lines[lines.index(line):lines.index(line)+10] if lines.index(line)+10 < len(lines) else lines[lines.index(line):]) for x in ['COMMIT;', 'ON CONFLICT DO NOTHING;']):
+                              skip_until_end = True
+                          elif line.startswith('>>>>>>>') and skip_until_end:
+                              skip_until_end = False
+                              # Add the statement back once
+                              if 'COMMIT' in '\n'.join(lines[max(0,lines.index(line)-5):lines.index(line)]):
+                                  new_lines.append('COMMIT;')
+                              elif 'ON CONFLICT' in '\n'.join(lines[max(0,lines.index(line)-5):lines.index(line)]):
+                                  new_lines.append('ON CONFLICT DO NOTHING;')
+                          elif not skip_until_end and not line.startswith('======='):
+                              new_lines.append(line)
+                      
+                      new_content = '\n'.join(new_lines)
+                      if new_content != t:
+                          p.write_text(new_content)
+                          sh(f"git add {p}")
+                          fixed_files.append(str(p))
+                          print(f"AUTO-FIXED (SQL endings): {p}")
+          
+          if fixed_files:
+              print(f"\n✅ Auto-fixed {len(fixed_files)} file(s) automatically:")
+              for f in fixed_files:
+                  print(f"  - {f}")
+          
+          # Check what's still conflicted
+          result = sh("git ls-files -u | cut -f2 | sort -u")
+          remaining_conflicts = result.stdout.strip().split('\n') if result.stdout.strip() else []
+          if remaining_conflicts and remaining_conflicts != ['']:
+              print(f"\n⚠️ {len(remaining_conflicts)} file(s) still have conflicts and need AI resolution:")
+              for f in remaining_conflicts:
+                  print(f"  - {f}")
           PY
 
       - name: Continue rebase if possible
@@ -354,6 +440,7 @@ jobs:
         id: conf
         run: |
           git ls-files -u | cut -f2 | sort -u > /tmp/conflicts || true
+          echo "Files still in conflict after autofix:"
           cat /tmp/conflicts || true
           echo "count=$(wc -l < /tmp/conflicts | tr -d ' ')" >> $GITHUB_OUTPUT
 
@@ -373,6 +460,7 @@ jobs:
             git commit -m "autofix: rebase + safe conflict resolves"
           fi
           git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
+          echo "✅ All conflicts resolved! PR is ready to merge."
 
       - name: Post per-file conflicts (manual path)
         if: steps.conf.outputs.count != '0'
@@ -387,6 +475,8 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const prnum = Number(process.env.PR_NUMBER);
+            
+            console.log(`Posting conflicts for ${files.length} files to PR #${prnum}`);
             
             await github.rest.issues.addLabels({ 
               owner, repo, issue_number: prnum, 
@@ -465,7 +555,7 @@ jobs:
             }
             
             const summary = `## 📋 Conflict Resolution Summary\n\n` +
-                          `Found ${files.length} file(s) with merge conflicts.\n\n` +
+                          `Found ${files.length} file(s) with merge conflicts that need AI resolution.\n\n` +
                           `${process.env.CODEX_HANDLE} - Please review the conflicts above and provide ` +
                           `\`\`\`resolved:<path>\`\`\` code fences for each file to resolve them.\n\n` +
                           `The apply-ai-patches workflow will automatically apply your fixes.`;
