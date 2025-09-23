@@ -118,7 +118,7 @@ class ProjectBase(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_dates(self) -> 'ProjectBase':
+    def validate_dates(self) -> "ProjectBase":
         preferred_start = self.preferred_start_date
         completion = self.completion_deadline
         bid_deadline = self.bid_deadline
@@ -134,7 +134,11 @@ class ProjectBase(BaseModel):
 
         budget_min = self.budget_min
         budget_max = self.budget_max
-        if budget_min is not None and budget_max is not None and budget_min > budget_max:
+        if (
+            budget_min is not None
+            and budget_max is not None
+            and budget_min > budget_max
+        ):
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
         return self
@@ -183,10 +187,14 @@ class ProjectUpdate(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_budget_and_dates(self) -> 'ProjectUpdate':
+    def validate_budget_and_dates(self) -> "ProjectUpdate":
         budget_min = self.budget_min
         budget_max = self.budget_max
-        if budget_min is not None and budget_max is not None and budget_min > budget_max:
+        if (
+            budget_min is not None
+            and budget_max is not None
+            and budget_min > budget_max
+        ):
             raise ValueError("Minimum budget cannot exceed maximum budget")
 
         preferred_start = self.preferred_start_date

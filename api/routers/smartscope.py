@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
-
 from dependencies import get_current_user
+from fastapi import APIRouter, Depends, Query, status
 from models.smartscope import (
     AccuracyMetrics,
     AnalysisListResponse,
@@ -20,7 +19,9 @@ from services.smartscope_service import SmartScopeService
 router = APIRouter(prefix="/smartscope", tags=["SmartScope AI"])
 
 
-@router.post("/analyze", response_model=SmartScopeAnalysis, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/analyze", response_model=SmartScopeAnalysis, status_code=status.HTTP_201_CREATED
+)
 async def analyze_project(
     payload: AnalysisRequest,
     current_user: User = Depends(get_current_user),
@@ -52,7 +53,9 @@ async def list_project_analyses(
 ) -> AnalysisListResponse:
     """List SmartScope analyses for a project with pagination."""
 
-    analyses, total = await service.list_analyses(project_id, page=page, per_page=per_page)
+    analyses, total = await service.list_analyses(
+        project_id, page=page, per_page=per_page
+    )
     return AnalysisListResponse(
         analyses=analyses,
         total=total,
@@ -63,7 +66,11 @@ async def list_project_analyses(
     )
 
 
-@router.post("/{analysis_id}/feedback", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/{analysis_id}/feedback",
+    response_model=None,
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def submit_feedback(
     analysis_id: UUID,
     payload: FeedbackRequest,
