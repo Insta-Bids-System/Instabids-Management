@@ -1,0 +1,276 @@
+name: Debug All Conflicts Before Autofix
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  CODEX_HANDLE: "@codex"
+
+jobs:
+  debug-conflicts:
+    if: github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body, '/debug-conflicts')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: 
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Get PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo,
+              pull_number: context.payload.issue.number
+            });
+            core.setOutput('number', pr.number);
+            core.setOutput('ref', pr.head.ref);
+
+      - name: Configure bot & fetch
+        run: |
+          git config user.name  "autorebase-bot"
+          git config user.email "autorebase-bot@users.noreply.github.com"
+          git config rerere.enabled true
+          git fetch origin "${{ steps.pr.outputs.ref }}"
+          git checkout "${{ steps.pr.outputs.ref }}"
+          git fetch origin main
+
+      - name: Rebase (allow conflicts)
+        run: git rebase origin/main || true
+
+      - name: Capture ALL conflicts BEFORE autofix
+        id: all-conflicts
+        run: |
+          echo "=== All conflicting files BEFORE autofix ==="
+          git ls-files -u | cut -f2 | sort -u | tee /tmp/all-conflicts
+          echo "count=$(wc -l < /tmp/all-conflicts | tr -d ' ')" >> $GITHUB_OUTPUT
+          
+          # Save conflict content for each file
+          mkdir -p /tmp/conflict-content
+          while read -r file; do
+            if [ -f "$file" ]; then
+              cp "$file" "/tmp/conflict-content/$(echo $file | tr '/' '_')"
+            fi
+          done < /tmp/all-conflicts
+
+      - name: Post ALL original conflicts to PR
+        if: steps.all-conflicts.outputs.count != '0'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const files = fs.readFileSync('/tmp/all-conflicts','utf8').trim().split('\n').filter(Boolean);
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prnum = Number(process.env.PR_NUMBER);
+            
+            // Post header
+            const header = `## 🔍 ALL Conflicts Found (${files.length} files)\n\n` +
+                          `These are ALL the conflicts BEFORE any autofix attempts:\n\n` +
+                          files.map(f => `- \`${f}\``).join('\n');
+            
+            await github.rest.issues.createComment({ 
+              owner, repo, issue_number: prnum, body: header 
+            });
+            
+            // Post each conflicted file
+            for (const file of files) {
+              try {
+                const safeName = file.replace(/\//g, '_');
+                const conflictPath = `/tmp/conflict-content/${safeName}`;
+                let content = '';
+                
+                if (fs.existsSync(conflictPath)) {
+                  content = fs.readFileSync(conflictPath, 'utf8');
+                } else if (fs.existsSync(file)) {
+                  content = fs.readFileSync(file, 'utf8');
+                } else {
+                  content = '[File not readable]';
+                }
+                
+                // Extract just the conflict sections
+                const hasConflicts = content.includes('<<<<<<<') && content.includes('>>>>>>>');
+                
+                const body = `## 🔧 Original Conflict in: \`${file}\`\n\n` +
+                            `${process.env.CODEX_HANDLE} - This file has conflicts (will attempt autofix next).\n\n` +
+                            '```diff\n' + content.slice(0, 50000) + '\n```';
+                
+                if (body.length < 60000) {
+                  await github.rest.issues.createComment({ 
+                    owner, repo, issue_number: prnum, body 
+                  });
+                } else {
+                  const truncated = `## 🔧 Original Conflict in: \`${file}\`\n\n` +
+                                   `File too large, showing first part:\n\n` +
+                                   '```diff\n' + content.slice(0, 55000) + '\n```\n[Truncated]';
+                  await github.rest.issues.createComment({ 
+                    owner, repo, issue_number: prnum, body: truncated 
+                  });
+                }
+              } catch (e) {
+                const body = `## 🔧 Original Conflict in: \`${file}\`\n\n` +
+                            `Could not read file: ${e.message}`;
+                await github.rest.issues.createComment({ 
+                  owner, repo, issue_number: prnum, body 
+                });
+              }
+            }
+
+      - name: Run autofix script
+        run: |
+          python - <<'PY'
+          import re, subprocess, pathlib
+          sh=lambda c: subprocess.run(c, shell=True, check=False)
+          # Markdown: union (drop markers)
+          for p in pathlib.Path('.').rglob('*.md'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  t=re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n','',t,flags=re.M)
+                  p.write_text(t); sh(f"git add {p}")
+                  print(f"Autofixed markdown: {p}")
+          # Lockfiles: prefer ours
+          for n in ['package-lock.json','yarn.lock','pnpm-lock.yaml','poetry.lock']:
+              p=pathlib.Path(n)
+              if p.exists() and sh(f"git ls-files -u {n}").returncode == 0: 
+                  sh(f"git checkout --ours {n} && git add {n}")
+                  print(f"Autofixed lockfile: {n}")
+          # Python: union/dedupe imports, dedupe include_router blocks
+          CON=re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
+          def dedupe(xs):
+              out=[]; seen=set()
+              for x in xs:
+                  if x not in seen:
+                      out.append(x); seen.add(x)
+              return out
+          def merge(a,b):
+              A=[l.rstrip() for l in a.strip().splitlines()]
+              B=[l.rstrip() for l in b.strip().splitlines()]
+              if ''.join(A)==''.join(B):
+                  return '\n'.join(A)+'\n'
+              if all(l.startswith(('import ','from ')) or l=='' for l in A+B):
+                  imp=dedupe([*A,*B]); imp=[l for l in imp if l]; imp.sort()
+                  return '\n'.join(imp)+'\n'
+              if 'app.include_router' in '\n'.join([*A,*B]):
+                  def blocks(L):
+                      buf=[]; out=[]
+                      for l in L+['']:
+                          buf.append(l)
+                          if l.strip().startswith(')') or l.strip()=='':
+                              ch='\n'.join(buf).strip()
+                              if 'app.include_router' in ch: out.append(ch)
+                              buf=[]
+                      return out
+                  m=dedupe(blocks(A)+blocks(B))
+                  if m: return '\n\n'.join(m)+'\n'
+              # SQL simple endings
+              if any(x in ''.join(A+B) for x in ['COMMIT;', 'ON CONFLICT DO NOTHING;']):
+                  if len(A) <= 3 and len(B) <= 3:
+                      return '\n'.join(dedupe(A+B))+'\n'
+              if len(A)<=10 and len(B)<=10:
+                  return '\n'.join(dedupe(A+B))+'\n'
+              return None
+          for p in pathlib.Path('.').rglob('*.py'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  def repl(m):
+                      r=merge(m.group(1), m.group(2))
+                      if r is not None:
+                          print(f"Autofixed Python: {p}")
+                      return m.group(0) if r is None else r
+                  new=CON.sub(repl,t)
+                  if new!=t:
+                      p.write_text(new); sh(f"git add {p}")
+          # SQL files
+          for p in pathlib.Path('.').rglob('*.sql'):
+              t=p.read_text(errors='ignore')
+              if '<<<<<<<' in t and '>>>>>>>' in t:
+                  def repl(m):
+                      r=merge(m.group(1), m.group(2))
+                      if r is not None:
+                          print(f"Autofixed SQL: {p}")
+                      return m.group(0) if r is None else r
+                  new=CON.sub(repl,t)
+                  if new!=t:
+                      p.write_text(new); sh(f"git add {p}")
+          PY
+
+      - name: Continue rebase if possible
+        run: git -c core.editor=true rebase --continue || true
+
+      - name: Check remaining conflicts AFTER autofix
+        id: remaining
+        run: |
+          echo "=== Remaining conflicts AFTER autofix ==="
+          git ls-files -u | cut -f2 | sort -u | tee /tmp/remaining-conflicts
+          echo "count=$(wc -l < /tmp/remaining-conflicts | tr -d ' ')" >> $GITHUB_OUTPUT
+
+      - name: Post autofix summary
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          ORIG_COUNT: ${{ steps.all-conflicts.outputs.count }}
+          REMAIN_COUNT: ${{ steps.remaining.outputs.count }}
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prnum = Number(process.env.PR_NUMBER);
+            const origCount = Number(process.env.ORIG_COUNT);
+            const remainCount = Number(process.env.REMAIN_COUNT);
+            
+            let remaining = [];
+            if (remainCount > 0) {
+              remaining = fs.readFileSync('/tmp/remaining-conflicts','utf8').trim().split('\n').filter(Boolean);
+            }
+            
+            const resolved = origCount - remainCount;
+            
+            const summary = `## ✅ Autofix Results\n\n` +
+                          `- **Original conflicts:** ${origCount} files\n` +
+                          `- **Auto-resolved:** ${resolved} files\n` +
+                          `- **Still need manual resolution:** ${remainCount} files\n\n` +
+                          (remainCount > 0 ? 
+                            `### Files needing manual resolution:\n` +
+                            remaining.map(f => `- \`${f}\``).join('\n') + '\n\n' +
+                            `${process.env.CODEX_HANDLE} - Please provide \`\`\`resolved:<path>\`\`\` blocks for the remaining files.`
+                            : '🎉 All conflicts were automatically resolved!');
+            
+            await github.rest.issues.createComment({ 
+              owner, repo, issue_number: prnum, body: summary 
+            });
+            
+            // If there are remaining conflicts, post them with resolution request
+            if (remainCount > 0) {
+              for (const file of remaining) {
+                try {
+                  const content = fs.readFileSync(file, 'utf8');
+                  const body = `## ⚠️ Manual resolution needed: \`${file}\`\n\n` +
+                              `This conflict couldn't be auto-resolved.\n\n` +
+                              '```diff\n' + content.slice(0, 50000) + '\n```\n\n' +
+                              `**Instructions:** Reply with a \`\`\`resolved:${file}\`\`\` code fence containing the fully resolved file.`;
+                  
+                  await github.rest.issues.createComment({ 
+                    owner, repo, issue_number: prnum, body 
+                  });
+                } catch (e) {
+                  console.error(`Could not read ${file}: ${e.message}`);
+                }
+              }
+            }
