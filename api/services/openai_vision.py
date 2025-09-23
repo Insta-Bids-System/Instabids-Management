@@ -12,11 +12,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
-from openai import AsyncOpenAI
-from PIL import Image, ImageEnhance, ImageOps
-
 from config import settings
 from models.smartscope import AnalysisRequest, MaterialItem, ScopeItem
+from openai import AsyncOpenAI
+from PIL import Image, ImageEnhance, ImageOps
 from services.smartscope_config import (
     CATEGORY_SCOPE_TEMPLATES,
     SYSTEM_PROMPT,

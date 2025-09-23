@@ -24,6 +24,7 @@ _Last audited: after full repository review of backend (`api/`), shared packages
 | Database schema | Arrays/constraints that do not match `SmartScopeService` payloads; missing `smartscope_costs`. | Align Supabase tables with API models (JSONB payloads, feedback shapes, dedicated costs table, RLS policies). |
 | Error handling & resilience | Direct OpenAI call without retries, rate limiting, or caching. | Harden vision pipeline (retries, backoff, circuit-breaker, cached responses, telemetry). |
 | API surface | CRUD limited to analyze/get/list/feedback/analytics. | Add update/approval endpoints, status polling (if async introduced), organization scoping, and richer Supabase error mapping. |
+| Cost monitoring | `CostMonitor` estimates spend in-memory but cannot persist or alert; budgets unused. | Persist cost rows, surface budget telemetry, and integrate alerting/reporting hooks. |
 | Integrations | Manual invocation only; no downstream wiring. | Trigger from project/media events, feed contractor matching & quote validation, define compensation strategies. |
 | Frontend | No SmartScope components or routes. | Build analysis dashboards, feedback editor, and contractor-facing views. |
 | QA & monitoring | Unit tests only; no observability. | Introduce integration/load/resilience tests, metrics, and alerting (latency, costs, accuracy). |
@@ -47,6 +48,7 @@ _Last audited: after full repository review of backend (`api/`), shared packages
 2. Introduce organization-level authorization checks leveraging project ownership, and ensure Supabase policies mirror them.
 3. Harden Supabase error handling: catch permission/schema issues and map to actionable HTTP responses with logging/alerts.
 4. Document synchronous vs. asynchronous behaviour; if asynchronous processing is required, define queue/background worker pattern and implement status polling.
+5. Wire `CostMonitor` to the new Supabase tables, expose budget analytics endpoints, and configure alerting hooks once persistence succeeds.
 
 ### Phase D – Integrations & Frontend Delivery
 1. Hook SmartScope analysis into project creation/media upload workflows (trigger analysis jobs, persist linkage).

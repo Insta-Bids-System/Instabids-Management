@@ -43,7 +43,8 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: Sequence[str] = Field(
-        default=("http://localhost:3000", "http://localhost:3456"), validation_alias="CORS_ORIGINS"
+        default=("http://localhost:3000", "http://localhost:3456"),
+        validation_alias="CORS_ORIGINS",
     )
 
     # Rate Limiting
@@ -77,10 +78,16 @@ class Settings(BaseSettings):
                 try:
                     parsed = json.loads(value)
                     if isinstance(parsed, list):
-                        return tuple(str(origin).strip() for origin in parsed if str(origin).strip())
+                        return tuple(
+                            str(origin).strip()
+                            for origin in parsed
+                            if str(origin).strip()
+                        )
                 except json.JSONDecodeError:
                     pass
-            return tuple(origin.strip() for origin in value.split(",") if origin.strip())
+            return tuple(
+                origin.strip() for origin in value.split(",") if origin.strip()
+            )
         if isinstance(value, (list, tuple)):
             return tuple(value)
         return ("http://localhost:3000",)

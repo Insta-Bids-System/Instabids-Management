@@ -2,10 +2,12 @@
 """
 Test script to verify property management API endpoints are working.
 """
-import requests
 import json
 
+import requests
+
 API_BASE = "http://localhost:8000"
+
 
 def test_api_health():
     """Test if the API is running"""
@@ -17,12 +19,13 @@ def test_api_health():
         print(f"[FAIL] API Health failed: {e}")
         return False
 
+
 def test_properties_endpoint():
     """Test properties endpoint without auth"""
     try:
         response = requests.get(f"{API_BASE}/api/properties", timeout=5)
         print(f"Properties endpoint: {response.status_code}")
-        
+
         if response.status_code == 403:
             print("   -> 403 Forbidden (Authentication required - EXPECTED)")
             return True
@@ -37,28 +40,29 @@ def test_properties_endpoint():
         print(f"[FAIL] Properties endpoint failed: {e}")
         return False
 
+
 def test_create_property():
     """Test creating a property (will fail due to auth, but tests endpoint exists)"""
     property_data = {
         "address": "123 Test Street",
-        "city": "Test City", 
+        "city": "Test City",
         "state": "CA",
         "zip_code": "12345",
         "property_type": "single_family",
         "bedrooms": 3,
         "bathrooms": 2,
-        "square_feet": 1500
+        "square_feet": 1500,
     }
-    
+
     try:
         response = requests.post(
             f"{API_BASE}/api/properties",
             json=property_data,
             headers={"Content-Type": "application/json"},
-            timeout=5
+            timeout=5,
         )
         print(f"Create property: {response.status_code}")
-        
+
         if response.status_code == 403:
             print("   -> 403 Forbidden (Authentication required - EXPECTED)")
             return True
@@ -75,31 +79,33 @@ def test_create_property():
         print(f"[FAIL] Create property failed: {e}")
         return False
 
+
 def main():
     print("Testing Property Management API")
     print("=" * 50)
-    
+
     results = []
-    
+
     # Test API health
     results.append(test_api_health())
-    
+
     # Test properties endpoints
     results.append(test_properties_endpoint())
     results.append(test_create_property())
-    
+
     print("\n" + "=" * 50)
     passed = sum(results)
     total = len(results)
-    
+
     if passed == total:
         print(f"[SUCCESS] All tests passed ({passed}/{total})")
         print("Property Management API is working correctly!")
     else:
         print(f"[WARNING] Some tests failed ({passed}/{total})")
         print("API endpoints exist but may need authentication setup")
-    
+
     return passed == total
+
 
 if __name__ == "__main__":
     main()

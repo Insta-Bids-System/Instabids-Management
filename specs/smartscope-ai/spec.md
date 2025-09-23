@@ -29,6 +29,7 @@ SmartScope AI analyzes property maintenance photos with OpenAI Vision, produces 
 | Service orchestration | ✅ Implemented (baseline) | `SmartScopeService` coordinates analysis, Supabase persistence, analytics aggregation, and cost estimation; exposed via FastAPI router.
 | Cost monitoring | ⚠️ Partial | `CostMonitor` estimates spend but the target `smartscope_costs` table is missing; writes currently fail in real environments.
 | Persistence schema | ❌ Incomplete | Supabase migration defines schemas incompatible with service payloads; no cost table or RLS policies tailored to SmartScope.
+| Authorization | ❌ Missing | FastAPI endpoints rely solely on `get_current_user`; Supabase policies for SmartScope tables are absent, so cross-organization access is not prevented.
 | Integrations | ❌ Missing | No automation from project creation/media upload, contractor matching, or quote workflows.
 | Frontend UI | ❌ Missing | No SmartScope components/routes in the web app.
 | Testing & QA | ⚠️ Partial | Unit tests with fakes exist; integration, load, and resilience coverage absent.
@@ -84,6 +85,35 @@ Each subsection includes the **Current State** and the **Required Outcome** to r
 - **Real-Time Updates**
   - Current: None.
   - Required: Implement polling or websocket updates for analysis status, cost consumption, and feedback acknowledgements.
+
+## 5. Non-Functional Requirements
+- **Performance**: Analysis requests should complete within 15 seconds P95 once telemetry is in place; UI updates must remain responsive under concurrent usage.
+- **Reliability**: Introduce retries/backoff for OpenAI and Supabase interactions, plus monitoring/alerting for failures and budget overruns.
+- **Security**: Enforce organization-level access, ensure media URLs are securely fetched, and handle sensitive data per privacy policies.
+- **Compliance & Auditing**: Maintain immutable logs of AI outputs, human edits, and cost events for future audits.
+
+## 6. Testing & Validation Strategy
+1. **Unit Tests**: Continue maintaining service-level fakes; expand coverage for new caching, retry, and schema handling logic.
+2. **Integration Tests**: Exercise FastAPI routes end-to-end with mocked Supabase responses to verify JSON contracts.
+3. **Contract Tests**: Snapshot shared Python/TypeScript models to detect drift automatically.
+4. **Performance Tests**: Load-test analysis endpoints and UI flows once caching/async processing is introduced.
+5. **Resilience Tests**: Simulate OpenAI downtime, Supabase errors, and malformed media to ensure graceful degradation.
+
+## 7. Documentation & Operational Readiness
+- Publish runbooks covering OpenAI key rotation, quota monitoring, Supabase incident response, and SmartScope cost controls.
+- Update `PROGRESS.md` and public-facing documentation once schema and UI work lands.
+- Provide onboarding material for property managers/contractors explaining SmartScope workflows, confidence scores, and feedback expectations.
+
+### 4.6 Cost Monitoring & Operational Controls
+- **Cost Persistence**
+  - Current: `CostMonitor` constructs payloads but cannot persist because `smartscope_costs` is missing.
+  - Required: Create the costs table with indexes/RLS and ensure writes succeed so analytics have real data.
+- **Budget Analytics**
+  - Current: Budget summaries computed in memory; no API endpoint exposes them.
+  - Required: Surface cost telemetry (daily/monthly totals, averages) through dedicated API endpoints.
+- **Alerting & Runbooks**
+  - Current: Logging-only warnings; no alert integrations or operational documentation.
+  - Required: Integrate alert channels (email/Slack/webhook) and publish runbooks covering quota monitoring, fallback handling, and manual escalation paths.
 
 ## 5. Non-Functional Requirements
 - **Performance**: Analysis requests should complete within 15 seconds P95 once telemetry is in place; UI updates must remain responsive under concurrent usage.

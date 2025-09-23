@@ -56,7 +56,7 @@ async def get_current_user(
     token = credentials.credentials
     try:
         payload = jwt.decode(
-        token, settings.jwt_secret_key_value, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key_value, algorithms=[settings.jwt_algorithm]
         )
         user_id = payload.get("sub")
         if user_id is None:
@@ -105,7 +105,7 @@ async def register(request: RegisterRequest):
         # Use service client for admin create (bypasses email confirmation)
         logger.info(f"Attempting to register user: {request.email}")
         logger.info(f"Using Supabase URL: {supabase_service.client.supabase_url}")
-        
+
         auth_response = supabase_service.service_client.auth.admin.create_user(
             {
                 "email": request.email,
@@ -137,10 +137,10 @@ async def register(request: RegisterRequest):
             .execute()
         )
         return RegisterResponse(
-            user_id=auth_user.id, 
-            email=request.email, 
+            user_id=auth_user.id,
+            email=request.email,
             requires_verification=True,
-            message="Registration successful! Please check your email to confirm your account."
+            message="Registration successful! Please check your email to confirm your account.",
         )
 
     except Exception as e:

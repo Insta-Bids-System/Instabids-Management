@@ -9,15 +9,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from supabase import Client
-
 from models.smartscope import (
+    SMARTSCOPE_METADATA_FIELDS,
     AccuracyMetrics,
     AnalysisMetadata,
     AnalysisRequest,
     FeedbackRecord,
     FeedbackRequest,
-    SMARTSCOPE_METADATA_FIELDS,
     SmartScopeAnalysis,
     SmartScopeAnalysisCreate,
 )
@@ -25,6 +23,7 @@ from models.user import User
 from services.cost_monitor import CostMonitor
 from services.openai_vision import OpenAIVisionService
 from services.supabase import supabase_service
+from supabase import Client
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +94,11 @@ class SmartScopeService:
         }
 
         try:
-            result = self.supabase.table("smartscope_analyses").insert(insert_payload).execute()
+            result = (
+                self.supabase.table("smartscope_analyses")
+                .insert(insert_payload)
+                .execute()
+            )
         except Exception as exc:  # pragma: no cover - network errors raised by supabase
             logger.exception("Failed to persist SmartScope analysis: %s", exc)
             raise HTTPException(
@@ -171,7 +174,9 @@ class SmartScopeService:
 
         try:
             result = (
-                self.supabase.table("smartscope_feedback").insert(feedback_payload).execute()
+                self.supabase.table("smartscope_feedback")
+                .insert(feedback_payload)
+                .execute()
             )
         except Exception as exc:  # pragma: no cover
             logger.exception("Failed to submit SmartScope feedback: %s", exc)
@@ -201,7 +206,11 @@ class SmartScopeService:
         )
 
     async def get_accuracy_metrics(self) -> AccuracyMetrics:
-        analyses = self.supabase.table("smartscope_analyses").select("id, category, confidence_score").execute()
+        analyses = (
+            self.supabase.table("smartscope_analyses")
+            .select("id, category, confidence_score")
+            .execute()
+        )
         feedback = (
             self.supabase.table("smartscope_feedback")
             .select("accuracy_rating, analysis_id, created_at")
@@ -219,7 +228,9 @@ class SmartScopeService:
             )
 
         average_confidence = (
-            mean(float(record.get("confidence_score") or 0.0) for record in analyses_data)
+            mean(
+                float(record.get("confidence_score") or 0.0) for record in analyses_data
+            )
             if analyses_data
             else 0.0
         )
@@ -228,7 +239,9 @@ class SmartScopeService:
         average_accuracy = mean(accuracy_ratings) if accuracy_ratings else None
 
         last_feedback_at = (
-            datetime.fromisoformat(feedback_data[0]["created_at"]) if feedback_data else None
+            datetime.fromisoformat(feedback_data[0]["created_at"])
+            if feedback_data
+            else None
         )
 
         category_accuracy = {
@@ -239,7 +252,9 @@ class SmartScopeService:
         return AccuracyMetrics(
             total_analyses=len(analyses_data),
             average_confidence=round(average_confidence, 2),
-            average_accuracy_rating=round(average_accuracy, 2) if average_accuracy else None,
+            average_accuracy_rating=(
+                round(average_accuracy, 2) if average_accuracy else None
+            ),
             category_accuracy=category_accuracy,
             last_feedback_at=last_feedback_at,
             improvements_last_30_days=None,
@@ -264,15 +279,29 @@ class SmartScopeService:
     def _build_analysis_from_record(
         record: Dict[str, Any], metadata: Dict[str, Any]
     ) -> SmartScopeAnalysis:
-        created_at = datetime.fromisoformat(record["created_at"]) if isinstance(record.get("created_at"), str) else record.get("created_at")
-        updated_at = datetime.fromisoformat(record["updated_at"]) if isinstance(record.get("updated_at"), str) else record.get("updated_at")
+        created_at = (
+            datetime.fromisoformat(record["created_at"])
+            if isinstance(record.get("created_at"), str)
+            else record.get("created_at")
+        )
+        updated_at = (
+            datetime.fromisoformat(record["updated_at"])
+            if isinstance(record.get("updated_at"), str)
+            else record.get("updated_at")
+        )
         metadata_model = AnalysisMetadata(
-            processing_status=metadata.get("processing_status", record.get("processing_status", "completed")),
+            processing_status=metadata.get(
+                "processing_status", record.get("processing_status", "completed")
+            ),
             model_version=str(metadata.get("model_version", "unknown")),
             tokens_used=metadata.get("tokens_used"),
             api_cost=metadata.get("api_cost"),
             processing_time_ms=metadata.get("processing_time_ms"),
-            requested_by=UUID(metadata.get("requested_by")) if metadata.get("requested_by") else None,
+            requested_by=(
+                UUID(metadata.get("requested_by"))
+                if metadata.get("requested_by")
+                else None
+            ),
         )
 
         return SmartScopeAnalysis(
@@ -325,7 +354,9 @@ class SmartScopeService:
             if metadata.get(key) is not None:
                 filtered[key] = metadata.get(key)
 
-        filtered.setdefault("processing_status", metadata.get("processing_status", "completed"))
+        filtered.setdefault(
+            "processing_status", metadata.get("processing_status", "completed")
+        )
         filtered.setdefault("model_version", metadata.get("model_version", "unknown"))
         return filtered
 
