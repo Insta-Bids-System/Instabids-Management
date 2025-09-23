@@ -1,9 +1,20 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Force correct Supabase project (from main branch - MUST BE KEPT)
+os.environ["SUPABASE_URL"] = "https://lmbpvkfcfhdfaihigfdu.supabase.co"
+os.environ["SUPABASE_ANON_KEY"] = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtYnB2a2ZjZmhkZmFpaGlnZmR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMjgzNTIsImV4cCI6MjA3MzcwNDM1Mn0.WH4-iA_FnW1EqGTl-hcpotzqBGgeCutKWBBMaa6Tnmg"
+)
+os.environ["SUPABASE_SERVICE_KEY"] = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtYnB2a2ZjZmhkZmFpaGlnZmR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODEyODM1MiwiZXhwIjoyMDczNzA0MzUyfQ.SSyQjgk5SSgptLXjKM6tNi_ZFZln9tA3FMJYmF3qSz0"
+)
+
+# Using relative imports (from PR branch)
 from .config import settings
 from .middleware.rate_limit import rate_limit_middleware
 from .routers import auth, projects, properties, quotes, smartscope
