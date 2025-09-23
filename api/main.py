@@ -14,10 +14,10 @@ os.environ["SUPABASE_SERVICE_KEY"] = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtYnB2a2ZjZmhkZmFpaGlnZmR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODEyODM1MiwiZXhwIjoyMDczNzA0MzUyfQ.SSyQjgk5SSgptLXjKM6tNi_ZFZln9tA3FMJYmF3qSz0"
 )
 
-from config import settings
-from middleware.rate_limit import rate_limit_middleware
-from routers import auth, projects, properties, smartscope
-from services.supabase import supabase_service
+from .config import settings
+from .middleware.rate_limit import rate_limit_middleware
+from .routers import auth, projects, properties, quotes, smartscope
+from .services.supabase import supabase_service
 
 # Configure logging
 logging.basicConfig(
@@ -93,6 +93,12 @@ app.include_router(
     projects.router,
     prefix="/api",
     tags=["Projects"],
+)
+
+app.include_router(
+    quotes.router,
+    prefix="/api",
+    tags=["Quotes"],
 )
 
 app.include_router(
