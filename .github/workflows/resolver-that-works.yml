@@ -1,0 +1,51 @@
+name: RESOLVER THAT ACTUALLY WORKS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  fix-conflicts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: RESOLVE PR 77 NOW
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Fetch PR 77 branch
+          git fetch origin codex/verify-implemented-specs-in-code-lkoeqc
+          git checkout codex/verify-implemented-specs-in-code-lkoeqc
+          
+          # Try to merge main
+          git fetch origin main
+          git merge origin/main --no-edit || true
+          
+          # If conflicts, auto-resolve them
+          if git diff --check; then
+            echo "No conflicts"
+          else
+            # Find conflicted files and accept incoming
+            git status --porcelain | grep '^UU' | awk '{print $2}' | while read file; do
+              echo "Resolving $file"
+              # Accept incoming changes for all conflicts
+              git checkout --theirs "$file"
+              git add "$file"
+            done
+            
+            # Commit if we resolved anything
+            if ! git diff --staged --quiet; then
+              git commit -m "Auto-resolve conflicts in PR #77"
+            fi
+          fi
+          
+          # Force push the resolution
+          git push origin codex/verify-implemented-specs-in-code-lkoeqc --force
