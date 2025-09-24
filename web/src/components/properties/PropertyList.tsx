@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Property, PropertyFilters } from '@/packages/shared/types/property';
-import { propertiesApi } from '@/packages/shared/api/properties';
+import { Property, PropertyFilters } from '@/packages/shared/src/types/property';
+import { propertiesApi } from '@/api/properties';
 import PropertyCard from './PropertyCard';
 import PropertyFilters from './PropertyFilters';
 import { Plus, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function PropertyList() {
+  const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function PropertyList() {
         <h1 className="text-2xl font-semibold text-gray-900">Properties</h1>
         <button
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          onClick={() => {/* TODO: Open add property modal */}}
+          onClick={() => router.push('/properties/new')}
         >
           <Plus className="w-5 h-5" />
           Add Property

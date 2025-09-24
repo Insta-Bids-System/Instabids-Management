@@ -10,7 +10,9 @@ from supabase import Client
 
 logger = logging.getLogger(__name__)
 
-TOKEN_COST_USD = 0.00001  # Approximate blended rate for GPT-4.1 mini input/output tokens
+TOKEN_COST_USD = (
+    0.00001  # Approximate blended rate for GPT-4.1 mini input/output tokens
+)
 
 
 class CostMonitor:
@@ -32,7 +34,11 @@ class CostMonitor:
         return round(tokens_used * TOKEN_COST_USD, 4)
 
     async def track_analysis_cost(
-        self, analysis_id: str, cost: float, tokens_used: Optional[int]
+        self,
+        analysis_id: str,
+        cost: float,
+        tokens_used: Optional[int],
+        processing_time_ms: Optional[int] = None,
     ) -> None:
         if not self.supabase:
             logger.debug("Supabase client missing; skipping cost tracking")
@@ -42,7 +48,7 @@ class CostMonitor:
             "analysis_id": analysis_id,
             "api_cost": float(cost),
             "tokens_used": int(tokens_used or 0),
-            "processing_time_ms": None,
+            "processing_time_ms": processing_time_ms,
         }
 
         try:
@@ -61,7 +67,9 @@ class CostMonitor:
         daily_total = self._sum_costs_since(now - timedelta(days=1))
         monthly_total = self._sum_costs_since(now - timedelta(days=30))
 
-        daily_usage = (daily_total / self.daily_budget) * 100 if self.daily_budget else 0
+        daily_usage = (
+            (daily_total / self.daily_budget) * 100 if self.daily_budget else 0
+        )
         monthly_usage = (
             (monthly_total / self.monthly_budget) * 100 if self.monthly_budget else 0
         )

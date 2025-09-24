@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from ..config import settings
+from config import settings
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
@@ -58,10 +58,7 @@ class SupabaseService:
     def client(self) -> Client:
         """Get the public Supabase client"""
         if self._client is None:
-            if (
-                not settings.supabase_url_value
-                or not settings.supabase_anon_key_value
-            ):
+            if not settings.supabase_url_value or not settings.supabase_anon_key_value:
                 raise ValueError("Supabase configuration missing")
             self._initialize_clients()
         return self._client

@@ -2,8 +2,8 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { propertyFormSchema, PropertyFormData } from '@/packages/shared/schemas/property';
-import { propertiesApi } from '@/packages/shared/api/properties';
+import { propertyFormSchema, PropertyFormData } from '@/packages/shared/src/schemas/property';
+import { propertiesApi } from '@/api/properties';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 

@@ -140,7 +140,7 @@ def build_category_guidance(category: str) -> str:
 
 __all__ = [
     "CATEGORY_GUIDANCE",
-    "CATEGORY_SCOPE_TEMPLATES", 
+    "CATEGORY_SCOPE_TEMPLATES",
     "SYSTEM_PROMPT",
     "build_category_guidance",
 ]

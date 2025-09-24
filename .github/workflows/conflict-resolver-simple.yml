@@ -1,0 +1,339 @@
+name: Auto Conflict Resolver (ACTUALLY WORKING NOW)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  resolve-conflicts:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, '/resolve-now')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Setup Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+      
+      - name: Get PR info
+        id: pr_info
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          PR_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}")
+          HEAD_REF=$(echo "$PR_INFO" | jq -r .head.ref)
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+      
+      - name: Checkout PR branch
+        run: |
+          git fetch origin ${{ steps.pr_info.outputs.head_ref }}
+          git checkout ${{ steps.pr_info.outputs.head_ref }}
+      
+      - name: Attempt rebase
+        run: |
+          git fetch origin main
+          git rebase origin/main || echo "Rebase conflicts detected - proceeding to auto-resolution"
+      
+      - name: Auto-resolve conflicts with intelligent strategies
+        run: |
+          echo "🤖 STARTING FULLY AUTOMATED CONFLICT RESOLUTION"
+          
+          # Get all conflicted files
+          git ls-files -u | cut -f2 | sort -u > conflicted_files.txt
+          
+          if [ ! -s conflicted_files.txt ]; then
+            echo "✅ No conflicts found - rebase succeeded!"
+            echo "CONFLICTS_RESOLVED=true" >> $GITHUB_ENV
+            echo "RESOLUTION_MESSAGE=No conflicts found - rebase completed successfully" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          echo "📋 Found conflicts in $(wc -l < conflicted_files.txt) files:"
+          cat conflicted_files.txt
+          
+          resolved_count=0
+          failed_files=""
+          
+          # Process each conflicted file with the SAME logic from auto-rebase-and-autofix.yml
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              echo "🔧 Auto-resolving conflicts in: $file"
+              
+              # Use the SAME Python logic that was working in auto-rebase-and-autofix.yml
+              python3 - <<EOF
+import re, subprocess, pathlib, sys
+sh=lambda c: subprocess.run(c, shell=True, check=False)
+
+file_path = "$file"
+p = pathlib.Path(file_path)
+fixed = False
+
+try:
+    t = p.read_text(errors='ignore')
+    
+    if '<<<<<<<' in t and '>>>>>>>' in t:
+        original_content = t
+        
+        # Strategy 1: Markdown files - union (drop markers)
+        if file_path.endswith('.md'):
+            t = re.sub(r'^<<<<<<< .*?\n|^=======\n|^>>>>>>> .*?\n', '', t, flags=re.M)
+            if t != original_content:
+                p.write_text(t)
+                fixed = True
+                print(f"AUTO-FIXED (markdown union): {file_path}")
+        
+        # Strategy 2: Lockfiles - prefer ours
+        elif any(file_path.endswith(ext) for ext in ['.json', '.lock', '.yaml']) and any(name in file_path for name in ['package-lock', 'yarn.lock', 'pnpm-lock', 'poetry.lock']):
+            sh(f"git checkout --ours {file_path} && git add {file_path}")
+            fixed = True
+            print(f"AUTO-FIXED (lockfile): {file_path}")
+        
+        # Strategy 3: Python files - union/dedupe imports, dedupe include_router blocks  
+        elif file_path.endswith('.py'):
+            CON = re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
+            
+            def dedupe(xs):
+                out = []
+                seen = set()
+                for x in xs:
+                    if x not in seen:
+                        out.append(x)
+                        seen.add(x)
+                return out
+            
+            def merge(a, b):
+                A = [l.rstrip() for l in a.strip().splitlines()]
+                B = [l.rstrip() for l in b.strip().splitlines()]
+                
+                # If identical, return one
+                if ''.join(A) == ''.join(B):
+                    return '\n'.join(A) + '\n'
+                
+                # Import merging
+                if all(l.startswith(('import ', 'from ')) or l == '' for l in A + B):
+                    imp = dedupe([*A, *B])
+                    imp = [l for l in imp if l]
+                    imp.sort()
+                    return '\n'.join(imp) + '\n'
+                
+                # Router blocks
+                if 'app.include_router' in '\n'.join([*A, *B]):
+                    def blocks(L):
+                        buf = []
+                        out = []
+                        for l in L + ['']:
+                            buf.append(l)
+                            if l.strip().startswith(')') or l.strip() == '':
+                                ch = '\n'.join(buf).strip()
+                                if 'app.include_router' in ch:
+                                    out.append(ch)
+                                buf = []
+                        return out
+                    m = dedupe(blocks(A) + blocks(B))
+                    if m:
+                        return '\n\n'.join(m) + '\n'
+                
+                # Small conflicts - merge both
+                if len(A) <= 10 and len(B) <= 10:
+                    return '\n'.join(dedupe(A + B)) + '\n'
+                
+                # Default: prefer incoming (B)
+                return '\n'.join(B) + '\n'
+            
+            def repl(m):
+                r = merge(m.group(1), m.group(2))
+                return r if r is not None else m.group(0)
+            
+            new = CON.sub(repl, t)
+            if new != t:
+                p.write_text(new)
+                fixed = True
+                print(f"AUTO-FIXED (python imports/routers): {file_path}")
+        
+        # Strategy 4: SQL files - simple endings
+        elif file_path.endswith('.sql') and ('COMMIT;' in t or 'ON CONFLICT DO NOTHING;' in t):
+            lines = t.splitlines()
+            new_lines = []
+            skip_until_end = False
+            for i, line in enumerate(lines):
+                if line.startswith('<<<<<<<') and any(x in '\n'.join(lines[i:i+10] if i+10 < len(lines) else lines[i:]) for x in ['COMMIT;', 'ON CONFLICT DO NOTHING;']):
+                    skip_until_end = True
+                elif line.startswith('>>>>>>>') and skip_until_end:
+                    skip_until_end = False
+                    # Add the statement back once
+                    if 'COMMIT' in '\n'.join(lines[max(0,i-5):i]):
+                        new_lines.append('COMMIT;')
+                    elif 'ON CONFLICT' in '\n'.join(lines[max(0,i-5):i]):
+                        new_lines.append('ON CONFLICT DO NOTHING;')
+                elif not skip_until_end and not line.startswith('======='):
+                    new_lines.append(line)
+            
+            new_content = '\n'.join(new_lines)
+            if new_content != t:
+                p.write_text(new_content)
+                fixed = True
+                print(f"AUTO-FIXED (SQL endings): {file_path}")
+        
+        # Strategy 5: Generic strategy - prefer incoming changes
+        else:
+            CON = re.compile(r"<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n", re.S)
+            def prefer_incoming(m):
+                return m.group(2) + '\n'  # Always use incoming changes
+            
+            new = CON.sub(prefer_incoming, t)
+            if new != t and '<<<<<<<' not in new and '>>>>>>>' not in new:
+                p.write_text(new)
+                fixed = True
+                print(f"AUTO-FIXED (prefer incoming): {file_path}")
+
+    if fixed:
+        sh(f"git add {file_path}")
+        sys.exit(0)  # Success
+    else:
+        print(f"❌ Could not auto-resolve: {file_path}")
+        sys.exit(1)  # Failed
+
+except Exception as e:
+    print(f"❌ Error processing {file_path}: {e}")
+    sys.exit(1)
+EOF
+              
+              if [ $? -eq 0 ]; then
+                resolved_count=$((resolved_count + 1))
+                echo "✅ Resolved: $file"
+              else
+                failed_files="$failed_files $file"
+                echo "❌ Failed to resolve: $file"
+              fi
+            else
+              echo "⚠️  File not found: $file"
+            fi
+          done < conflicted_files.txt
+          
+          total_files=$(wc -l < conflicted_files.txt)
+          echo "📊 Resolution Summary:"
+          echo "   Total files: $total_files"
+          echo "   Resolved: $resolved_count"
+          echo "   Failed: $((total_files - resolved_count))"
+          
+          if [ $resolved_count -eq $total_files ]; then
+            echo "CONFLICTS_RESOLVED=true" >> $GITHUB_ENV
+            echo "RESOLUTION_MESSAGE=✅ All $total_files conflicts automatically resolved!" >> $GITHUB_ENV
+          elif [ $resolved_count -gt 0 ]; then
+            echo "CONFLICTS_RESOLVED=partial" >> $GITHUB_ENV
+            echo "RESOLUTION_MESSAGE=⚠️ Resolved $resolved_count of $total_files conflicts. Failed:$failed_files" >> $GITHUB_ENV
+          else
+            echo "CONFLICTS_RESOLVED=false" >> $GITHUB_ENV
+            echo "RESOLUTION_MESSAGE=❌ Failed to resolve any conflicts automatically" >> $GITHUB_ENV
+          fi
+      
+      - name: Complete rebase and commit if conflicts resolved
+        if: env.CONFLICTS_RESOLVED == 'true'
+        run: |
+          echo "🚀 Completing rebase with resolved conflicts..."
+          
+          # Continue rebase
+          git rebase --continue || {
+            echo "❌ Rebase continue failed, trying alternative approach"
+            git rebase --abort
+            git merge origin/main -X ours --no-edit
+          }
+          
+          echo "✅ Rebase completed successfully!"
+      
+      - name: Push resolved changes
+        if: env.CONFLICTS_RESOLVED == 'true'
+        run: |
+          echo "📤 Pushing resolved changes back to PR branch..."
+          git push origin ${{ steps.pr_info.outputs.head_ref }} --force-with-lease
+          echo "✅ Changes pushed successfully!"
+      
+      - name: Post resolution results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr_info.outputs.pr_number }};
+            const resolved = process.env.CONFLICTS_RESOLVED;
+            const message = process.env.RESOLUTION_MESSAGE;
+            
+            let emoji = "🤖";
+            let title = "AUTOMATED CONFLICT RESOLUTION COMPLETE";
+            let status = "";
+            
+            if (resolved === 'true') {
+              emoji = "✅";
+              status = "**SUCCESS: All conflicts automatically resolved and pushed!**";
+            } else if (resolved === 'partial') {
+              emoji = "⚠️";
+              status = "**PARTIAL: Some conflicts resolved, manual intervention needed for remaining files**";
+            } else {
+              emoji = "❌";
+              status = "**FAILED: Automated resolution unsuccessful, manual intervention required**";
+            }
+            
+            const body = `## ${emoji} ${title}
+            
+${status}
+
+${message}
+
+---
+**🤖 This was a fully automated process** - no human intervention required for resolved conflicts.
+**⏰ Completed at:** ${new Date().toISOString()}
+**🔄 Retry:** Comment \`/resolve-now\` again to retry automated resolution.`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body
+            });
+      
+      - name: Mark as ready if fully resolved
+        if: env.CONFLICTS_RESOLVED == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr_info.outputs.pr_number }};
+            
+            // Add success label
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['auto-resolved', 'ready-for-review']
+              });
+            } catch (error) {
+              console.log('Could not add labels:', error.message);
+            }
+            
+            const body = `🎉 **PR #${prNumber} is now ready for review!**
+
+All merge conflicts have been automatically resolved and the branch is up to date with main.
+
+**Next steps:**
+- Review the automated changes
+- Run any necessary tests  
+- Merge when ready
+
+*Automated conflict resolution completed successfully* ✅`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body
+            });

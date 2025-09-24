@@ -36,9 +36,10 @@ Status: 95% Complete
 Spec: COMPLETED ✅
 Plan: COMPLETED ✅
 Tasks: COMPLETED ✅
-Backend: COMPLETED ✅
+Backend: COMPLETED ✅ (14 endpoints working)
+Frontend: PARTIAL ✅ (Basic CRUD working, missing advanced features)
 Database: COMPLETED ✅
-Status: 80% Complete
+Status: 42% Complete (64/153 tasks)
 ```
 
 #### 🚧 MARKETPLACE FEATURES (NEW PRIORITY)
@@ -87,11 +88,11 @@ Status: 35% Complete (Web form intake operational, remaining channels + UI pendi
 ```yaml
 Spec: COMPLETED ✅
 Plan: NOT COMPLETED
-Tasks: IN PROGRESS (24 tasks)
-Backend: IN PROGRESS (analysis endpoints, feedback APIs, cost tracking)
+Tasks: IN PROGRESS (domain contracts shipped; schema alignment + automation still open)
+Backend: IN PROGRESS (analysis + feedback endpoints working against fakes; Supabase persistence blocked by schema drift)
 AI Integration: IN PROGRESS (vision service, preprocessing, prompting)
-Database: IN PROGRESS (Supabase persistence + analytics)
-Status: 45% Complete (SmartScope pipeline foundations implemented)
+Database: IN PROGRESS (004 schema still uses arrays/missing costs table; 005 alignment migration not applied)
+Status: 40% Complete (Core service logic exists, but database alignment, UI, and integrations remain outstanding)
 ```
 
 ### ✅ Completed Recently
@@ -122,8 +123,8 @@ Status: 45% Complete (SmartScope pipeline foundations implemented)
 - Implementing project creation backend API endpoints
 - Building project creation wizard interface
 - Building contractor onboarding frontend components
+- Aligning SmartScope AI schema (analyses, feedback, costs) with FastAPI payloads and enabling persistence
 - Expanding SmartScope AI analysis capabilities (vision pipeline, feedback, cost tracking) and setting up integration
-- Expanding SmartScope AI analysis capabilities (vision pipeline, feedback, cost tracking)
 
 ### 🚫 Blockers
 - None currently

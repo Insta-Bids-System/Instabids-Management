@@ -1,310 +1,137 @@
 # SmartScope AI Specification
 
-## Feature Name: AI-Powered Scope Extraction
+_Last validated: repository audit covering `api/`, `packages/shared`, `migrations`, and `web/` directories._
 
-## Overview
-Use OpenAI Vision to automatically analyze property maintenance photos and generate standardized work scopes, enabling contractors to understand project requirements without site visits.
+## 1. Feature Overview
+SmartScope AI analyzes property maintenance photos with OpenAI Vision, produces structured scopes of work, and captures feedback to improve accuracy over time. The initial FastAPI implementation provides the core analysis flow but significant gaps remain across persistence, integrations, and user experience. This specification documents what exists today and the requirements to deliver the production-ready feature.
 
-## User Stories
+## 2. Stakeholders & User Goals
 
-### As a Property Manager
-- I want AI to identify maintenance issues from photos
-- I want detailed scope descriptions generated automatically
-- I want to avoid explaining the same issue multiple times
-- I want contractors to understand the work needed
-- I want to reduce back-and-forth clarifications
+### 2.1 Property Managers
+- Receive AI-generated descriptions of maintenance issues.
+- Edit or approve scopes before sharing with contractors.
+- Track analysis confidence and cost impact per project.
 
-### As a Contractor
-- I want clear understanding of work required
-- I want to identify potential issues from photos
-- I want to estimate accurately without site visits
-- I want to know materials and tools needed
-- I want to spot additional problems
+### 2.2 Contractors
+- Access standardized scopes, materials, and risk notes prior to bidding.
+- Flag inaccuracies or missing work items to feed the learning loop.
 
-### As the Platform
-- I want consistent scope descriptions
-- I want reduced clarification requests
-- I want faster quote turnaround
-- I want better quote accuracy
+### 2.3 Platform Operations
+- Monitor SmartScope accuracy, latency, and spending.
+- Ensure analyses integrate with project creation, contractor matching, and quote validation.
+- Maintain audit trails for regulatory and quality purposes.
 
-## Functional Requirements
+## 3. Current Implementation Summary
+| Area | Status | Notes |
+|------|--------|-------|
+| Domain models | ✅ Implemented | Pydantic models in `api/models/smartscope.py` mirror TypeScript types in `packages/shared/types/smartscope.ts`.
+| Vision pipeline | ✅ Implemented (baseline) | `OpenAIVisionService` handles HTTP fetch, EXIF auto-orientation, resizing, light enhancement, multi-image prompt creation, and JSON parsing.
+| Service orchestration | ✅ Implemented (baseline) | `SmartScopeService` coordinates analysis, Supabase persistence, analytics aggregation, and cost estimation; exposed via FastAPI router.
+| Cost monitoring | ⚠️ Partial | `CostMonitor` estimates spend but the target `smartscope_costs` table is missing; writes currently fail in real environments.
+| Persistence schema | ❌ Incomplete | Supabase migration defines schemas incompatible with service payloads; no cost table or RLS policies tailored to SmartScope.
+| Authorization | ❌ Missing | FastAPI endpoints rely solely on `get_current_user`; Supabase policies for SmartScope tables are absent, so cross-organization access is not prevented.
+| Integrations | ❌ Missing | No automation from project creation/media upload, contractor matching, or quote workflows.
+| Frontend UI | ❌ Missing | No SmartScope components/routes in the web app.
+| Testing & QA | ⚠️ Partial | Unit tests with fakes exist; integration, load, and resilience coverage absent.
 
-### Photo Analysis Pipeline
+## 4. Functional Requirements
+Each subsection includes the **Current State** and the **Required Outcome** to reach production readiness.
 
-1. **Image Preprocessing**
-   - Auto-orientation correction
-   - Resolution optimization
-   - Multiple angle detection
-   - Image quality assessment
-   - Brightness/contrast adjustment
+### 4.1 Photo Analysis Pipeline
+- **Image Preprocessing**
+  - Current: Auto-orientation, resizing, and brightness/contrast adjustment implemented.
+  - Required: Add blur/low-light detection, quality scoring, and warnings surfaced in the API response.
+- **AI Request Handling**
+  - Current: Synchronous OpenAI Vision request with static prompt builder, no retry logic.
+  - Required: Structured prompt templates per category, retry/backoff with error classification, optional circuit breaker, and response caching for duplicate analyses.
+- **Scope Generation Output**
+  - Current: Structured JSON containing issues, scope items, materials, confidence, and metadata persisted via Supabase client.
+  - Required: Guarantee schema parity between API responses and Supabase tables; include telemetry (latency, tokens) and quality flags once persistence aligns.
 
-2. **AI Analysis Request**
-   - Send to OpenAI Vision API
-   - Include context prompts
-   - Property type context
-   - Category-specific analysis
-   - Multi-image correlation
+### 4.2 Scope Enhancement & Feedback Loop
+- **Human Review Workflow**
+  - Current: Feedback endpoint stores corrections, but schema mismatch prevents real Supabase writes; no approval/update endpoint.
+  - Required: Create update/approval APIs, persist reviewer metadata, maintain change history, and expose analytics on human adjustments.
+- **Learning & Calibration**
+  - Current: Accuracy analytics computed in-memory from cached data only.
+  - Required: Aggregate feedback in Supabase, adjust prompt/thresholds over time, surface category-level accuracy trends, and provide configuration for confidence targets.
 
-3. **Scope Generation**
-   - Problem identification
-   - Severity assessment
-   - Work required description
-   - Materials needed
-   - Time estimate suggestion
-   - Safety considerations
+### 4.3 Persistence & Authorization
+- **Database Schema**
+  - Current: `smartscope_analyses` stores arrays incompatible with service JSON; `smartscope_feedback` column names differ; `smartscope_costs` absent.
+  - Required: Migrate to JSONB payloads matching `SmartScopeService` models, add foreign keys to projects/media/users, create `smartscope_costs`, and enforce RLS policies aligned with organization scoping.
+- **Authorization**
+  - Current: FastAPI router relies on `get_current_user` but lacks organization-level checks; Supabase policies do not exist.
+  - Required: Validate user access against project ownership and mirror logic in Supabase policies to prevent cross-organization leakage.
 
-### Analysis Categories
+### 4.4 Integrations & Automation
+- **Project & Media Triggers**
+  - Current: Analyses executed manually through API.
+  - Required: Automatic invocation on project creation or media upload, with idempotent handling to avoid duplicate work.
+- **Downstream Workflows**
+  - Current: No contractor matching or quote validation hooks.
+  - Required: Publish SmartScope outputs to contractor matching services, quote comparison logic, and notifications for assigned parties.
+- **Failure Handling**
+  - Current: Errors bubble up to the client; no compensation strategy.
+  - Required: Document/manual fallback path, alerting, and optional queue-based retries for failed analyses.
 
-1. **Plumbing**
-   - Leak detection and source
-   - Pipe material identification
-   - Fixture type and condition
-   - Water damage assessment
-   - Drainage issues
-   - Required parts list
+### 4.5 Frontend Experience
+- **Analysis Review UI**
+  - Current: Absent.
+  - Required: Build Vue components (analysis list, detail view, scope editor, confidence display) and route integration under `web/src/components/smartscope/`.
+- **Feedback Submission**
+  - Current: No UI workflow.
+  - Required: Enable property managers and contractors to submit corrections, view history, and monitor accuracy improvements.
+- **Real-Time Updates**
+  - Current: None.
+  - Required: Implement polling or websocket updates for analysis status, cost consumption, and feedback acknowledgements.
 
-2. **Electrical**
-   - Outlet/switch issues
-   - Panel problems
-   - Wiring visible issues
-   - Code violations spotted
-   - Safety hazards
-   - Upgrade recommendations
+## 5. Non-Functional Requirements
+- **Performance**: Analysis requests should complete within 15 seconds P95 once telemetry is in place; UI updates must remain responsive under concurrent usage.
+- **Reliability**: Introduce retries/backoff for OpenAI and Supabase interactions, plus monitoring/alerting for failures and budget overruns.
+- **Security**: Enforce organization-level access, ensure media URLs are securely fetched, and handle sensitive data per privacy policies.
+- **Compliance & Auditing**: Maintain immutable logs of AI outputs, human edits, and cost events for future audits.
 
-3. **HVAC**
-   - Unit type and model
-   - Visible damage/wear
-   - Ductwork issues
-   - Filter condition
-   - Thermostat problems
-   - Maintenance needs
+## 6. Testing & Validation Strategy
+1. **Unit Tests**: Continue maintaining service-level fakes; expand coverage for new caching, retry, and schema handling logic.
+2. **Integration Tests**: Exercise FastAPI routes end-to-end with mocked Supabase responses to verify JSON contracts.
+3. **Contract Tests**: Snapshot shared Python/TypeScript models to detect drift automatically.
+4. **Performance Tests**: Load-test analysis endpoints and UI flows once caching/async processing is introduced.
+5. **Resilience Tests**: Simulate OpenAI downtime, Supabase errors, and malformed media to ensure graceful degradation.
 
-4. **Roofing**
-   - Shingle/tile damage
-   - Leak indicators
-   - Gutter issues
-   - Flashing problems
-   - Structural concerns
-   - Weather damage
+## 7. Documentation & Operational Readiness
+- Publish runbooks covering OpenAI key rotation, quota monitoring, Supabase incident response, and SmartScope cost controls.
+- Update `PROGRESS.md` and public-facing documentation once schema and UI work lands.
+- Provide onboarding material for property managers/contractors explaining SmartScope workflows, confidence scores, and feedback expectations.
 
-5. **General Maintenance**
-   - Paint needs
-   - Drywall damage
-   - Flooring issues
-   - Appliance problems
-   - Pest indicators
-   - Cleaning requirements
+### 4.6 Cost Monitoring & Operational Controls
+- **Cost Persistence**
+  - Current: `CostMonitor` constructs payloads but cannot persist because `smartscope_costs` is missing.
+  - Required: Create the costs table with indexes/RLS and ensure writes succeed so analytics have real data.
+- **Budget Analytics**
+  - Current: Budget summaries computed in memory; no API endpoint exposes them.
+  - Required: Surface cost telemetry (daily/monthly totals, averages) through dedicated API endpoints.
+- **Alerting & Runbooks**
+  - Current: Logging-only warnings; no alert integrations or operational documentation.
+  - Required: Integrate alert channels (email/Slack/webhook) and publish runbooks covering quota monitoring, fallback handling, and manual escalation paths.
 
-### AI Prompting Strategy
+## 5. Non-Functional Requirements
+- **Performance**: Analysis requests should complete within 15 seconds P95 once telemetry is in place; UI updates must remain responsive under concurrent usage.
+- **Reliability**: Introduce retries/backoff for OpenAI and Supabase interactions, plus monitoring/alerting for failures and budget overruns.
+- **Security**: Enforce organization-level access, ensure media URLs are securely fetched, and handle sensitive data per privacy policies.
+- **Compliance & Auditing**: Maintain immutable logs of AI outputs, human edits, and cost events for future audits.
 
-1. **Context Provision**
-   ```
-   Analyze these maintenance photos:
-   - Property Type: [Residential/Commercial]
-   - Area: [Kitchen/Bathroom/etc]
-   - Reported Issue: [PM Description]
-   - Category: [Plumbing/Electrical/etc]
-   ```
+## 6. Testing & Validation Strategy
+1. **Unit Tests**: Continue maintaining service-level fakes; expand coverage for new caching, retry, and schema handling logic.
+2. **Integration Tests**: Exercise FastAPI routes end-to-end with mocked Supabase responses to verify JSON contracts.
+3. **Contract Tests**: Snapshot shared Python/TypeScript models to detect drift automatically.
+4. **Performance Tests**: Load-test analysis endpoints and UI flows once caching/async processing is introduced.
+5. **Resilience Tests**: Simulate OpenAI downtime, Supabase errors, and malformed media to ensure graceful degradation.
 
-2. **Analysis Instructions**
-   ```
-   Identify:
-   1. Primary problem
-   2. Secondary issues
-   3. Severity (Emergency/High/Medium/Low)
-   4. Required repairs
-   5. Materials needed
-   6. Estimated time
-   7. Safety concerns
-   8. Access requirements
-   ```
+## 7. Documentation & Operational Readiness
+- Publish runbooks covering OpenAI key rotation, quota monitoring, Supabase incident response, and SmartScope cost controls.
+- Update `PROGRESS.md` and public-facing documentation once schema and UI work lands.
+- Provide onboarding material for property managers/contractors explaining SmartScope workflows, confidence scores, and feedback expectations.
 
-3. **Output Format**
-   ```json
-   {
-     "primary_issue": "Leaking pipe under sink",
-     "severity": "High",
-     "scope_items": [
-       "Replace P-trap assembly",
-       "Check supply line connections",
-       "Test for additional leaks"
-     ],
-     "materials": [
-       "1.5\" P-trap kit",
-       "Plumber's tape",
-       "Pipe compound"
-     ],
-     "estimated_hours": 1.5,
-     "safety_notes": "Water shutoff required",
-     "additional_observations": [
-       "Possible water damage to cabinet"
-     ],
-     "confidence": 0.92
-   }
-   ```
-
-### Scope Enhancement
-
-1. **Human Review Interface**
-   - AI-generated scope display
-   - Edit capabilities
-   - Add/remove items
-   - Adjust estimates
-   - Flag inaccuracies
-
-2. **Learning Feedback**
-   - Contractor corrections
-   - PM validations
-   - Actual vs estimated
-   - Pattern recognition
-   - Improvement tracking
-
-3. **Scope Standardization**
-   - Consistent terminology
-   - Industry-standard descriptions
-   - Code reference inclusion
-   - Material specifications
-   - Tool requirements
-
-### Integration Points
-
-1. **Project Creation**
-   - Trigger on photo upload
-   - Process during creation
-   - Display results immediately
-   - Allow override/edit
-
-2. **Contractor View**
-   - Show AI analysis
-   - Highlight uncertainties
-   - Display confidence scores
-   - Link to photos
-
-3. **Quote Comparison**
-   - Match quote items to scope
-   - Identify missing items
-   - Flag over-scoping
-   - Calculate completeness
-
-## Non-Functional Requirements
-
-### Performance
-- Analysis completion < 15 seconds
-- Batch processing for multiple photos
-- Async processing with status updates
-- Caching of results
-
-### Accuracy Targets
-- Primary issue identification > 90%
-- Severity assessment > 85%
-- Material identification > 75%
-- Time estimates ±30%
-
-### API Management
-- Rate limiting (100 requests/min)
-- Cost tracking per project
-- Fallback for API failures
-- Response caching
-
-## User Interface
-
-### Analysis Display
-```
-AI Scope Analysis ✨
-
-Primary Issue: Leaking P-trap under kitchen sink
-Severity: 🔴 High - Active water leak
-
-Scope of Work:
-✓ Replace P-trap assembly
-✓ Inspect supply lines
-✓ Check for cabinet damage
-✓ Test all connections
-
-Materials Needed:
-• 1.5" P-trap kit
-• Plumber's tape
-• Pipe compound
-
-Estimated Time: 1-2 hours
-
-⚠️ Additional Observations:
-- Possible water damage to cabinet floor
-- Garbage disposal showing wear
-
-Confidence: 92%
-[Edit Scope] [Add Items] [Approve]
-```
-
-### Contractor Quote View
-```
-Project Scope (AI-Generated)
-
-📸 Based on 4 photos analyzed
-
-What We Found:
-[Primary issue description]
-
-Work Required:
-1. [Scope item 1]
-2. [Scope item 2]
-
-View Analysis: [Expand]
-View Photos: [Gallery]
-Questions? [Ask PM]
-```
-
-## Business Logic
-
-### Confidence Thresholds
-- >90%: Display as primary
-- 70-90%: Display with indicator
-- <70%: Show as "possible"
-- <50%: Don't display
-
-### Cost Management
-- Track API usage per organization
-- Set monthly limits
-- Batch similar requests
-- Cache frequent patterns
-
-### Fallback Logic
-1. If API fails → Manual scope entry
-2. If low confidence → Request more photos
-3. If unclear → Prompt PM for details
-
-## Success Criteria
-- [ ] 80% scope accuracy per contractor feedback
-- [ ] 50% reduction in clarification requests
-- [ ] 90% of projects use AI scope
-- [ ] 30% faster quote submissions
-- [ ] 85% contractor satisfaction with scopes
-
-## Dependencies
-- OpenAI API access (needed)
-- Photo upload system (complete)
-- Project creation flow (pending)
-- Contractor viewing interface (pending)
-
-## Security Considerations
-- No PII in API requests
-- Secure API key management
-- Photo sanitization
-- Rate limiting per user
-- Audit trail of analyses
-
-## Cost Considerations
-- OpenAI Vision API: ~$0.01 per image
-- Average 5 images per project
-- Target: <$0.10 per project
-- Monthly budget: $500 initial
-
-## Future Enhancements
-- Custom model training
-- Video analysis
-- Before/after comparison
-- Predictive maintenance
-- Cost estimation
-- Code compliance checking
-- 3D reconstruction
-- AR visualization
+---
+This specification now mirrors the existing FastAPI-based implementation and enumerates the outstanding functionality required to ship SmartScope AI as a production-ready feature.

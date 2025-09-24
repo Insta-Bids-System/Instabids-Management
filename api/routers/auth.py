@@ -2,11 +2,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from ..config import settings
+from config import settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from ..models.auth import (
+from models.auth import (
     AuthResponse,
     LoginRequest,
     MessageResponse,
@@ -20,7 +20,7 @@ from ..models.auth import (
     UserResponse,
     VerifyEmailRequest,
 )
-from ..services.supabase import supabase_service
+from services.supabase import supabase_service
 
 router = APIRouter()
 security = HTTPBearer()
@@ -56,7 +56,7 @@ async def get_current_user(
     token = credentials.credentials
     try:
         payload = jwt.decode(
-        token, settings.jwt_secret_key_value, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret_key_value, algorithms=[settings.jwt_algorithm]
         )
         user_id = payload.get("sub")
         if user_id is None:
@@ -85,7 +85,7 @@ async def register(request: RegisterRequest):
         org_id = None
         if request.user_type == "property_manager" and request.organization_name:
             org_response = (
-                supabase_service.client.table("organizations")
+                supabase_service.service_client.table("organizations")
                 .insert(
                     {"name": request.organization_name, "type": "property_management"}
                 )
@@ -102,12 +102,16 @@ async def register(request: RegisterRequest):
             "phone": request.phone,
         }
 
-        # Use regular sign-up instead of admin create
-        auth_response = supabase_service.client.auth.sign_up(
+        # Use service client for admin create (bypasses email confirmation)
+        logger.info(f"Attempting to register user: {request.email}")
+        logger.info(f"Using Supabase URL: {supabase_service.client.supabase_url}")
+
+        auth_response = supabase_service.service_client.auth.admin.create_user(
             {
                 "email": request.email,
                 "password": request.password,
-                "options": {"data": user_metadata},
+                "email_confirm": True,  # Auto-confirm email
+                "user_metadata": user_metadata,
             }
         )
 
@@ -118,7 +122,7 @@ async def register(request: RegisterRequest):
 
         # Create user profile
         profile_response = (
-            supabase_service.client.table("user_profiles")
+            supabase_service.service_client.table("user_profiles")
             .insert(
                 {
                     "id": auth_user.id,
@@ -133,7 +137,10 @@ async def register(request: RegisterRequest):
             .execute()
         )
         return RegisterResponse(
-            user_id=auth_user.id, email=request.email, requires_verification=True
+            user_id=auth_user.id,
+            email=request.email,
+            requires_verification=True,
+            message="Registration successful! Please check your email to confirm your account.",
         )
 
     except Exception as e:
