@@ -170,7 +170,7 @@ jobs:
           fi
           git push --force-with-lease origin HEAD:${{ matrix.pr.ref }}
 
-      - name: Generate per-file conflict comments with full hunks
+      - name: Generate per-file conflict comments with COMPLETE files
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         env:
@@ -179,6 +179,7 @@ jobs:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const fs = require('fs');
+            const { execSync } = require('child_process');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -189,72 +190,119 @@ jobs:
               labels: ['codex','needs-merge-help','auto-conflict'] 
             }).catch(()=>{});
             
-            // Post one comment per conflicted file with full hunks
+            console.log(`🔍 Detected ${files.length} conflicted files: ${files.join(', ')}`);
+            
+            // Post COMPLETE file content for each conflicted file
             for (const file of files) {
               try {
-                const content = fs.readFileSync(file, 'utf8');
-                const lines = content.split('\n');
-                let conflictBlocks = [];
-                let inConflict = false;
-                let currentBlock = [];
-                let contextSize = 10;
+                console.log(`📖 Processing: ${file}`);
+                let content = '';
+                let readMethod = 'unknown';
                 
-                for (let i = 0; i < lines.length; i++) {
-                  const line = lines[i];
-                  if (line.startsWith('<<<<<<<')) {
-                    inConflict = true;
-                    const start = Math.max(0, i - contextSize);
-                    const beforeContext = lines.slice(start, i);
-                    currentBlock = [...beforeContext, line];
-                  } else if (line.startsWith('>>>>>>>') && inConflict) {
-                    currentBlock.push(line);
-                    const end = Math.min(lines.length, i + contextSize + 1);
-                    const afterContext = lines.slice(i + 1, end);
-                    currentBlock.push(...afterContext);
-                    conflictBlocks.push(currentBlock.join('\n'));
-                    currentBlock = [];
-                    inConflict = false;
-                  } else if (inConflict) {
-                    currentBlock.push(line);
+                // Method 1: Try direct read first (works if file exists with markers)
+                try {
+                  content = fs.readFileSync(file, 'utf8');
+                  readMethod = 'direct fs.readFileSync';
+                  console.log(`✅ Read via direct fs.readFileSync`);
+                } catch (fsErr) {
+                  console.log(`⚠️ Direct read failed: ${fsErr.message}`);
+                  
+                  // Method 2: Use cat command to force read
+                  try {
+                    content = execSync(`cat "${file}" 2>/dev/null || echo "FILE_NOT_FOUND"`, 
+                                     { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+                    if (content === 'FILE_NOT_FOUND\n') {
+                      throw new Error('File not found via cat');
+                    }
+                    readMethod = 'cat command';
+                    console.log(`✅ Read via cat command`);
+                  } catch (catErr) {
+                    console.log(`⚠️ Cat failed: ${catErr.message}`);
+                    
+                    // Method 3: Try git show for working tree
+                    try {
+                      content = execSync(`git show ":${file}" 2>/dev/null || echo "GIT_SHOW_FAILED"`, 
+                                       { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+                      if (content === 'GIT_SHOW_FAILED\n') {
+                        throw new Error('Git show failed');
+                      }
+                      readMethod = 'git show';
+                      console.log(`✅ Read via git show`);
+                    } catch (gitErr) {
+                      console.log(`⚠️ Git show failed: ${gitErr.message}`);
+                      
+                      // Method 4: Get diff as last resort
+                      try {
+                        const diff = execSync(`git diff "${file}"`, 
+                                            { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+                        content = `[Could not read full file - showing diff]\n\n${diff}`;
+                        readMethod = 'git diff (fallback)';
+                        console.log(`⚠️ Using git diff as fallback`);
+                      } catch (diffErr) {
+                        content = `ERROR: Unable to read file using any method\nTried: direct read, cat, git show, git diff\nLast error: ${diffErr.message}`;
+                        readMethod = 'all methods failed';
+                        console.log(`❌ All read methods failed`);
+                      }
+                    }
                   }
                 }
                 
-                const header = `## 🔧 Conflict in: \`${file}\`\n\n${process.env.CODEX_HANDLE} - This file has merge conflicts that need resolution.\n\n`;
+                const hasMarkers = content.includes('<<<<<<<') && content.includes('>>>>>>>');
+                console.log(`📊 File size: ${content.length} bytes, has conflict markers: ${hasMarkers}, read method: ${readMethod}`);
                 
-                if (conflictBlocks.length === 0) {
-                  const body = header + 
-                    '```\n' + content.slice(0, 50000) + '\n```\n\n' +
-                    '**Instructions:** Reply with a ```resolved:' + file + '``` code fence containing the fully resolved file.';
+                const header = `## 🔧 Conflict in: \`${file}\`\n\n` +
+                              `${process.env.CODEX_HANDLE} - This file has merge conflicts that need resolution.\n` +
+                              `Read method: ${readMethod}\n\n`;
+                
+                // Post the COMPLETE file content (no truncation of conflict chunks)
+                if (content.length > 50000) {
+                  // Split very large files into multiple comments
+                  const chunks = [];
+                  const chunkSize = 45000;
+                  for (let i = 0; i < content.length; i += chunkSize) {
+                    chunks.push(content.slice(i, i + chunkSize));
+                  }
+                  
+                  console.log(`📦 Splitting into ${chunks.length} chunks`);
+                  
+                  for (let i = 0; i < chunks.length; i++) {
+                    let body = '';
+                    if (i === 0) {
+                      body = header + `### Part ${i + 1} of ${chunks.length}\n\n`;
+                    } else {
+                      body = `### Part ${i + 1} of ${chunks.length} for \`${file}\`\n\n`;
+                    }
+                    
+                    body += '```\n' + chunks[i] + '\n```\n\n';
+                    
+                    if (i === chunks.length - 1) {
+                      body += '**Instructions:** Reply with a ```resolved:' + file + 
+                              '``` code fence containing the COMPLETE fully resolved file with all conflicts merged correctly.';
+                    }
+                    
+                    await github.rest.issues.createComment({ 
+                      owner, repo, issue_number: prnum, body 
+                    });
+                  }
+                } else {
+                  // Single comment for normal files
+                  const body = header +
+                              '### Complete File Content with Conflicts\n\n' +
+                              '```\n' + content + '\n```\n\n' +
+                              '**Instructions:** Reply with a ```resolved:' + file + 
+                              '``` code fence containing the COMPLETE fully resolved file with all conflicts merged correctly.';
+                  
                   await github.rest.issues.createComment({ 
                     owner, repo, issue_number: prnum, body 
                   });
-                } else {
-                  for (let i = 0; i < conflictBlocks.length; i++) {
-                    const isLast = i === conflictBlocks.length - 1;
-                    let body = '';
-                    if (i === 0) body = header;
-                    body += `### Conflict ${i + 1} of ${conflictBlocks.length}\n\n` +
-                            '```diff\n' + conflictBlocks[i] + '\n```\n\n';
-                    if (isLast) {
-                      body += '**Instructions:** Reply with a ```resolved:' + file + 
-                              '``` code fence containing the fully resolved file with all conflicts merged correctly.';
-                    }
-                    if (body.length < 60000) {
-                      await github.rest.issues.createComment({ 
-                        owner, repo, issue_number: prnum, body 
-                      });
-                    } else {
-                      const truncated = body.slice(0, 59000) + '\n\n[Truncated due to size]';
-                      await github.rest.issues.createComment({ 
-                        owner, repo, issue_number: prnum, body: truncated 
-                      });
-                    }
-                  }
+                  console.log(`✅ Posted complete content for ${file}`);
                 }
               } catch (e) {
+                console.error(`❌ Failed to process ${file}:`, e);
                 const body = `## 🔧 Conflict in: \`${file}\`\n\n` +
-                            `Could not read file content: ${e.message}\n\n` +
-                            `${process.env.CODEX_HANDLE} - Please manually check this file.`;
+                            `ERROR: Could not read file content\n` +
+                            `Error: ${e.message}\n\n` +
+                            `${process.env.CODEX_HANDLE} - Please manually resolve this file.`;
                 await github.rest.issues.createComment({ 
                   owner, repo, issue_number: prnum, body 
                 });
@@ -262,9 +310,10 @@ jobs:
             }
             
             const summary = `## 📋 Conflict Resolution Summary\n\n` +
-                          `Found ${files.length} file(s) with merge conflicts.\n\n` +
-                          `${process.env.CODEX_HANDLE} - Please review the conflicts above and provide ` +
-                          `\`\`\`resolved:<path>\`\`\` code fences for each file to resolve them.\n\n` +
+                          `✅ **Successfully detected ALL ${files.length} file(s) with merge conflicts:**\n\n` +
+                          files.map(f => `- \`${f}\``).join('\n') + '\n\n' +
+                          `${process.env.CODEX_HANDLE} - I have posted the COMPLETE content of each file above.\n` +
+                          `Please provide \`\`\`resolved:<path>\`\`\` code fences to resolve them.\n\n` +
                           `The apply-ai-patches workflow will automatically apply your fixes.`;
             await github.rest.issues.createComment({ 
               owner, repo, issue_number: prnum, body: summary 
@@ -462,7 +511,7 @@ jobs:
           git push --force-with-lease origin HEAD:${{ steps.pr.outputs.ref }}
           echo "✅ All conflicts resolved! PR is ready to merge."
 
-      - name: Post per-file conflicts (manual path)
+      - name: Post per-file conflicts with COMPLETE files (manual path)
         if: steps.conf.outputs.count != '0'
         uses: actions/github-script@v7
         env:
@@ -471,6 +520,7 @@ jobs:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
             const fs = require('fs');
+            const { execSync } = require('child_process');
             const files = fs.readFileSync('/tmp/conflicts','utf8').trim().split('\n').filter(Boolean);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -483,71 +533,119 @@ jobs:
               labels: ['codex','needs-merge-help','auto-conflict'] 
             }).catch(()=>{});
             
+            console.log(`🔍 Detected ${files.length} conflicted files: ${files.join(', ')}`);
+            
+            // Post COMPLETE file content for each conflicted file
             for (const file of files) {
               try {
-                const content = fs.readFileSync(file, 'utf8');
-                const lines = content.split('\n');
-                let conflictBlocks = [];
-                let inConflict = false;
-                let currentBlock = [];
-                let contextSize = 10;
+                console.log(`📖 Processing: ${file}`);
+                let content = '';
+                let readMethod = 'unknown';
                 
-                for (let i = 0; i < lines.length; i++) {
-                  const line = lines[i];
-                  if (line.startsWith('<<<<<<<')) {
-                    inConflict = true;
-                    const start = Math.max(0, i - contextSize);
-                    const beforeContext = lines.slice(start, i);
-                    currentBlock = [...beforeContext, line];
-                  } else if (line.startsWith('>>>>>>>') && inConflict) {
-                    currentBlock.push(line);
-                    const end = Math.min(lines.length, i + contextSize + 1);
-                    const afterContext = lines.slice(i + 1, end);
-                    currentBlock.push(...afterContext);
-                    conflictBlocks.push(currentBlock.join('\n'));
-                    currentBlock = [];
-                    inConflict = false;
-                  } else if (inConflict) {
-                    currentBlock.push(line);
+                // Method 1: Try direct read first (works if file exists with markers)
+                try {
+                  content = fs.readFileSync(file, 'utf8');
+                  readMethod = 'direct fs.readFileSync';
+                  console.log(`✅ Read via direct fs.readFileSync`);
+                } catch (fsErr) {
+                  console.log(`⚠️ Direct read failed: ${fsErr.message}`);
+                  
+                  // Method 2: Use cat command to force read
+                  try {
+                    content = execSync(`cat "${file}" 2>/dev/null || echo "FILE_NOT_FOUND"`, 
+                                     { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+                    if (content === 'FILE_NOT_FOUND\n') {
+                      throw new Error('File not found via cat');
+                    }
+                    readMethod = 'cat command';
+                    console.log(`✅ Read via cat command`);
+                  } catch (catErr) {
+                    console.log(`⚠️ Cat failed: ${catErr.message}`);
+                    
+                    // Method 3: Try git show for working tree
+                    try {
+                      content = execSync(`git show ":${file}" 2>/dev/null || echo "GIT_SHOW_FAILED"`, 
+                                       { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+                      if (content === 'GIT_SHOW_FAILED\n') {
+                        throw new Error('Git show failed');
+                      }
+                      readMethod = 'git show';
+                      console.log(`✅ Read via git show`);
+                    } catch (gitErr) {
+                      console.log(`⚠️ Git show failed: ${gitErr.message}`);
+                      
+                      // Method 4: Get diff as last resort
+                      try {
+                        const diff = execSync(`git diff "${file}"`, 
+                                            { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+                        content = `[Could not read full file - showing diff]\n\n${diff}`;
+                        readMethod = 'git diff (fallback)';
+                        console.log(`⚠️ Using git diff as fallback`);
+                      } catch (diffErr) {
+                        content = `ERROR: Unable to read file using any method\nTried: direct read, cat, git show, git diff\nLast error: ${diffErr.message}`;
+                        readMethod = 'all methods failed';
+                        console.log(`❌ All read methods failed`);
+                      }
+                    }
                   }
                 }
                 
-                const header = `## 🔧 Conflict in: \`${file}\`\n\n${process.env.CODEX_HANDLE} - This file has merge conflicts that need resolution.\n\n`;
+                const hasMarkers = content.includes('<<<<<<<') && content.includes('>>>>>>>');
+                console.log(`📊 File size: ${content.length} bytes, has conflict markers: ${hasMarkers}, read method: ${readMethod}`);
                 
-                if (conflictBlocks.length === 0) {
-                  const body = header + 
-                    '```\n' + content.slice(0, 50000) + '\n```\n\n' +
-                    '**Instructions:** Reply with a ```resolved:' + file + '``` code fence containing the fully resolved file.';
+                const header = `## 🔧 Conflict in: \`${file}\`\n\n` +
+                              `${process.env.CODEX_HANDLE} - This file has merge conflicts that need resolution.\n` +
+                              `Read method: ${readMethod}\n\n`;
+                
+                // Post the COMPLETE file content (no truncation of conflict chunks)
+                if (content.length > 50000) {
+                  // Split very large files into multiple comments
+                  const chunks = [];
+                  const chunkSize = 45000;
+                  for (let i = 0; i < content.length; i += chunkSize) {
+                    chunks.push(content.slice(i, i + chunkSize));
+                  }
+                  
+                  console.log(`📦 Splitting into ${chunks.length} chunks`);
+                  
+                  for (let i = 0; i < chunks.length; i++) {
+                    let body = '';
+                    if (i === 0) {
+                      body = header + `### Part ${i + 1} of ${chunks.length}\n\n`;
+                    } else {
+                      body = `### Part ${i + 1} of ${chunks.length} for \`${file}\`\n\n`;
+                    }
+                    
+                    body += '```\n' + chunks[i] + '\n```\n\n';
+                    
+                    if (i === chunks.length - 1) {
+                      body += '**Instructions:** Reply with a ```resolved:' + file + 
+                              '``` code fence containing the COMPLETE fully resolved file with all conflicts merged correctly.';
+                    }
+                    
+                    await github.rest.issues.createComment({ 
+                      owner, repo, issue_number: prnum, body 
+                    });
+                  }
+                } else {
+                  // Single comment for normal files
+                  const body = header +
+                              '### Complete File Content with Conflicts\n\n' +
+                              '```\n' + content + '\n```\n\n' +
+                              '**Instructions:** Reply with a ```resolved:' + file + 
+                              '``` code fence containing the COMPLETE fully resolved file with all conflicts merged correctly.';
+                  
                   await github.rest.issues.createComment({ 
                     owner, repo, issue_number: prnum, body 
                   });
-                } else {
-                  for (let i = 0; i < conflictBlocks.length; i++) {
-                    const isLast = i === conflictBlocks.length - 1;
-                    let body = '';
-                    if (i === 0) body = header;
-                    body += `### Conflict ${i + 1} of ${conflictBlocks.length}\n\n` +
-                            '```diff\n' + conflictBlocks[i] + '\n```\n\n';
-                    if (isLast) {
-                      body += '**Instructions:** Reply with a ```resolved:' + file + 
-                              '``` code fence containing the fully resolved file with all conflicts merged correctly.';
-                    }
-                    if (body.length < 60000) {
-                      await github.rest.issues.createComment({ 
-                        owner, repo, issue_number: prnum, body 
-                      });
-                    } else {
-                      const truncated = body.slice(0, 59000) + '\n\n[Truncated due to size]';
-                      await github.rest.issues.createComment({ 
-                        owner, repo, issue_number: prnum, body: truncated 
-                      });
-                    }
-                  }
+                  console.log(`✅ Posted complete content for ${file}`);
                 }
               } catch (e) {
+                console.error(`❌ Failed to process ${file}:`, e);
                 const body = `## 🔧 Conflict in: \`${file}\`\n\n` +
-                            `Could not read file content: ${e.message}\n\n` +
-                            `${process.env.CODEX_HANDLE} - Please manually check this file.`;
+                            `ERROR: Could not read file content\n` +
+                            `Error: ${e.message}\n\n` +
+                            `${process.env.CODEX_HANDLE} - Please manually resolve this file.`;
                 await github.rest.issues.createComment({ 
                   owner, repo, issue_number: prnum, body 
                 });
@@ -555,9 +653,10 @@ jobs:
             }
             
             const summary = `## 📋 Conflict Resolution Summary\n\n` +
-                          `Found ${files.length} file(s) with merge conflicts that need AI resolution.\n\n` +
-                          `${process.env.CODEX_HANDLE} - Please review the conflicts above and provide ` +
-                          `\`\`\`resolved:<path>\`\`\` code fences for each file to resolve them.\n\n` +
+                          `✅ **Successfully detected ALL ${files.length} file(s) with merge conflicts:**\n\n` +
+                          files.map(f => `- \`${f}\``).join('\n') + '\n\n' +
+                          `${process.env.CODEX_HANDLE} - I have posted the COMPLETE content of each file above.\n` +
+                          `Please provide \`\`\`resolved:<path>\`\`\` code fences to resolve them.\n\n` +
                           `The apply-ai-patches workflow will automatically apply your fixes.`;
             await github.rest.issues.createComment({ 
               owner, repo, issue_number: prnum, body: summary 
