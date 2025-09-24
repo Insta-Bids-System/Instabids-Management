@@ -29,9 +29,7 @@ async def lifespan(app: FastAPI):
         supabase_service.force_reinitialize()
         _ = supabase_service.client
         logger.info("Supabase connection established")
-        logger.info(
-            f"Service key available: {bool(settings.supabase_service_key_value)}"
-        )
+        logger.info(f"Service key available: {bool(settings.supabase_service_key_value)}")
     except Exception as e:
         logger.error(f"Failed to connect to Supabase: {e}")
         raise
