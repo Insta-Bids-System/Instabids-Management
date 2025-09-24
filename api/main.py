@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="InstaBids Management API",
-    description="Property management platform API",
+    description="Backend API for InstaBids property management platform",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -57,8 +58,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Add rate limiting middleware
+# Rate limiting middleware
 @app.middleware("http")
 async def add_rate_limiting(request, call_next):
     return await rate_limit_middleware(request, call_next)
@@ -67,7 +67,7 @@ async def add_rate_limiting(request, call_next):
 # Include routers
 app.include_router(
     auth.router,
-    prefix="/api/auth",
+    prefix="/api",
     tags=["Authentication"],
 )
 
@@ -92,27 +92,31 @@ app.include_router(
 app.include_router(
     smartscope.router,
     prefix="/api",
-    tags=["SmartScope AI"],
+    tags=["SmartScope"],
 )
 
 
 # Health check endpoint
 @app.get("/health")
 async def health_check():
+    """Simple health check endpoint"""
     return {
         "status": "healthy",
         "environment": settings.api_env,
-        "version": "0.1.0",
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat()
     }
 
 
 # Root endpoint
 @app.get("/")
 async def root():
+    """Root endpoint with API information"""
     return {
-        "message": "InstaBids Management API",
+        "name": "InstaBids Management API",
+        "version": "0.1.0",
+        "status": "running",
         "docs": "/docs",
-        "health": "/health",
+        "health": "/health"
     }
 
 
@@ -120,7 +124,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "main:app",
+        app,
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.api_env == "development",
