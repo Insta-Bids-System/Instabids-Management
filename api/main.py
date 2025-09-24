@@ -1,129 +1,82 @@
+"""Main FastAPI application module for InstaBids Management API."""
+
+from __future__ import annotations
+
 import logging
 from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
-from .config import settings
-from .middleware.rate_limit import rate_limit_middleware
-from .routers import auth, projects, properties, quotes, smartscope
-from .services.supabase import supabase_service
+from api.config import settings
+from api.dependencies import get_supabase_client
+from api.routers.auth import router as auth_router
+from api.routers.properties import router as properties_router
+from api.routers.projects import router as projects_router
+from api.routers.quotes import router as quotes_router
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO if settings.api_env == "development" else logging.WARNING,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("Starting InstaBids Management API...")
-    logger.info(f"Environment: {settings.api_env}")
-    logger.info(f"Supabase URL: {settings.supabase_url_value}")
-
-    # Initialize Supabase connection
-    try:
-        supabase_service.force_reinitialize()
-        _ = supabase_service.client
-        logger.info("Supabase connection established")
-        logger.info(
-            f"Service key available: {bool(settings.supabase_service_key_value)}"
-        )
-    except Exception as e:
-        logger.error(f"Failed to connect to Supabase: {e}")
-        raise
-
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan manager."""
+    logger.info("Starting InstaBids Management API")
+    supabase = get_supabase_client()
+    logger.info(f"Connected to Supabase: {settings.supabase_url}")
     yield
-
-    # Shutdown
-    logger.info("Shutting down InstaBids Management API...")
+    logger.info("Shutting down InstaBids Management API")
 
 
-# Create FastAPI app
 app = FastAPI(
     title="InstaBids Management API",
-    description="Property management platform API",
-    version="0.1.0",
+    description="Property management platform for maintenance coordination",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
-# Configure CORS
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(settings.cors_origins),
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# Add rate limiting middleware
-@app.middleware("http")
-async def add_rate_limiting(request, call_next):
-    return await rate_limit_middleware(request, call_next)
-
+# Trusted host middleware
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["localhost", "127.0.0.1", "*.vercel.app"],
+)
 
 # Include routers
-app.include_router(
-    auth.router,
-    prefix="/api/auth",
-    tags=["Authentication"],
-)
-
-app.include_router(
-    properties.router,
-    prefix="/api",
-    tags=["Properties"],
-)
-
-app.include_router(
-    projects.router,
-    prefix="/api",
-    tags=["Projects"],
-)
-
-app.include_router(
-    quotes.router,
-    prefix="/api",
-    tags=["Quotes"],
-)
-
-app.include_router(
-    smartscope.router,
-    prefix="/api",
-    tags=["SmartScope AI"],
-)
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(properties_router, prefix="/api/properties", tags=["properties"])
+app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
+app.include_router(quotes_router, prefix="/api/quotes", tags=["quotes"])
 
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "environment": settings.api_env,
-        "version": "0.1.0",
-    }
-
-
-# Root endpoint
 @app.get("/")
-async def root():
-    return {
-        "message": "InstaBids Management API",
-        "docs": "/docs",
-        "health": "/health",
-    }
+async def root() -> dict[str, Any]:
+    """Root endpoint."""
+    return {"message": "InstaBids Management API", "version": "1.0.0"}
 
 
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host=settings.api_host,
-        port=settings.api_port,
-        reload=settings.api_env == "development",
-    )
+@app.get("/health")
+async def health_check() -> dict[str, Any]:
+    """Health check endpoint."""
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("users").select("count", count="exact").limit(0).execute()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as exc:
+        logger.exception("Health check failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service unavailable",
+        ) from exc
