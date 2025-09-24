@@ -1,0 +1,111 @@
+name: Auto Conflict Resolver - WORKING VERSION
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+
+jobs:
+  resolve-conflicts:
+    # Simplified condition - just check if it's a PR comment with /resolve-now
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/resolve-now')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Get PR info
+        id: pr_info
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          PR_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}")
+          
+          HEAD_REF=$(echo "$PR_INFO" | jq -r .head.ref)
+          BASE_REF=$(echo "$PR_INFO" | jq -r .base.ref)
+          
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+      
+      - name: Checkout and merge
+        run: |
+          git fetch origin ${{ steps.pr_info.outputs.head_ref }}
+          git fetch origin ${{ steps.pr_info.outputs.base_ref }}
+          git checkout ${{ steps.pr_info.outputs.head_ref }}
+          
+          # Try to merge
+          git merge origin/${{ steps.pr_info.outputs.base_ref }} --no-edit || echo "Has conflicts"
+      
+      - name: Resolve conflicts
+        run: |
+          # Get conflicted files
+          git diff --name-only --diff-filter=U > conflicted_files.txt || true
+          
+          if [ ! -s conflicted_files.txt ]; then
+            echo "No conflicts!"
+            echo "RESOLVED=true" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          # Python resolver
+          cat > resolve.py << 'EOF'
+import sys, re
+with open(sys.argv[1], 'r', errors='ignore') as f:
+    content = f.read()
+
+# Simple resolution - prefer incoming changes
+pattern = re.compile(r'<<<<<<< .*?\n(.*?)\n=======\n(.*?)\n>>>>>>> .*?\n', re.DOTALL)
+resolved = pattern.sub(lambda m: m.group(2) + '\n', content)
+
+if '<<<<<<<' not in resolved:
+    with open(sys.argv[1], 'w') as f:
+        f.write(resolved)
+    print(f"Resolved: {sys.argv[1]}")
+    sys.exit(0)
+sys.exit(1)
+EOF
+          
+          # Process files
+          while read -r file; do
+            python3 resolve.py "$file" && git add "$file"
+          done < conflicted_files.txt
+          
+          # Commit if all resolved
+          if ! git diff --name-only --diff-filter=U | grep -q .; then
+            git commit -m "Auto-resolve conflicts for PR #${{ steps.pr_info.outputs.pr_number }}"
+            echo "RESOLVED=true" >> $GITHUB_ENV
+          else
+            echo "RESOLVED=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Push
+        if: env.RESOLVED == 'true'
+        run: |
+          git push origin ${{ steps.pr_info.outputs.head_ref }}
+      
+      - name: Comment result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const resolved = process.env.RESOLVED === 'true';
+            const body = resolved 
+              ? '✅ **Conflicts resolved!** PR is ready for review.'
+              : '❌ **Failed to resolve conflicts.** Manual intervention required.';
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr_info.outputs.pr_number }},
+              body
+            });
