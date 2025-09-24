@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
-from middleware.rate_limit import rate_limit_middleware
-from routers import auth, projects, properties, quotes, smartscope
-from services.supabase import supabase_service
+from .config import settings
+from .middleware.rate_limit import rate_limit_middleware
+from .routers import auth, projects, properties, quotes, smartscope
+from .services.supabase import supabase_service
 
 # Configure logging
 logging.basicConfig(
@@ -22,12 +22,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting InstaBids Management API...")
     logger.info(f"Environment: {settings.api_env}")
-    logger.info(f"Supabase URL: {settings.supabase_url}")
+    logger.info(f"Supabase URL: {settings.supabase_url_value}")
 
     # Initialize Supabase connection
     try:
+        supabase_service.force_reinitialize()
         _ = supabase_service.client
         logger.info("Supabase connection established")
+        logger.info(
+            f"Service key available: {bool(settings.supabase_service_key_value)}"
+        )
     except Exception as e:
         logger.error(f"Failed to connect to Supabase: {e}")
         raise
