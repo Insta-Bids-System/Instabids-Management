@@ -1,14 +1,13 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import settings
-from .middleware.rate_limit import rate_limit_middleware
-from .routers import auth, projects, properties, quotes, smartscope
-from .services.supabase import supabase_service
+from config import settings
+from middleware.rate_limit import rate_limit_middleware
+from routers import auth, projects, properties, quotes, smartscope
+from services.supabase import supabase_service
 
 # Configure logging
 logging.basicConfig(
@@ -23,14 +22,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting InstaBids Management API...")
     logger.info(f"Environment: {settings.api_env}")
-    logger.info(f"Supabase URL: {settings.supabase_url_value}")
+    logger.info(f"Supabase URL: {settings.supabase_url}")
 
     # Initialize Supabase connection
     try:
-        supabase_service.force_reinitialize()
         _ = supabase_service.client
         logger.info("Supabase connection established")
-        logger.info(f"Service key available: {bool(settings.supabase_service_key_value)}")
     except Exception as e:
         logger.error(f"Failed to connect to Supabase: {e}")
         raise
@@ -44,7 +41,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="InstaBids Management API",
-    description="Backend API for InstaBids property management platform",
+    description="Property management platform API",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -58,7 +55,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rate limiting middleware
+
+# Add rate limiting middleware
 @app.middleware("http")
 async def add_rate_limiting(request, call_next):
     return await rate_limit_middleware(request, call_next)
@@ -67,7 +65,7 @@ async def add_rate_limiting(request, call_next):
 # Include routers
 app.include_router(
     auth.router,
-    prefix="/api",
+    prefix="/api/auth",
     tags=["Authentication"],
 )
 
@@ -92,31 +90,27 @@ app.include_router(
 app.include_router(
     smartscope.router,
     prefix="/api",
-    tags=["SmartScope"],
+    tags=["SmartScope AI"],
 )
 
 
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Simple health check endpoint"""
     return {
         "status": "healthy",
         "environment": settings.api_env,
-        "timestamp": __import__("datetime").datetime.utcnow().isoformat()
+        "version": "0.1.0",
     }
 
 
 # Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
     return {
-        "name": "InstaBids Management API",
-        "version": "0.1.0",
-        "status": "running",
+        "message": "InstaBids Management API",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
 
 
@@ -124,7 +118,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        app,
+        "main:app",
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.api_env == "development",
