@@ -96,7 +96,9 @@ def require_env(var: str) -> str:
     return value
 
 
-def supabase_request(url: str, key: str, method: str, path: str, body: dict | None) -> None:
+def supabase_request(
+    url: str, key: str, method: str, path: str, body: dict | None
+) -> None:
     endpoint = urllib.parse.urljoin(url.rstrip("/") + "/", path.lstrip("/"))
     data = None
     headers = {
@@ -106,12 +108,16 @@ def supabase_request(url: str, key: str, method: str, path: str, body: dict | No
     }
     if body is not None:
         data = json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(endpoint, data=data, method=method, headers=headers)
+    request = urllib.request.Request(
+        endpoint, data=data, method=method, headers=headers
+    )
     try:
         with urllib.request.urlopen(request) as response:
             # Drain body to avoid ResourceWarning on some Python versions.
             response.read()
-    except urllib.error.HTTPError as exc:  # pragma: no cover - network errors handled at runtime
+    except (
+        urllib.error.HTTPError
+    ) as exc:  # pragma: no cover - network errors handled at runtime
         if exc.code == 409:
             print(f"  - {path} already exists, skipping")
             return
@@ -157,7 +163,9 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     if "storage" in args.resources:
         if dry_run:
-            base_url = os.getenv("SUPABASE_URL", "https://lmbpvkfcfhdfaihigfdu.supabase.co")
+            base_url = os.getenv(
+                "SUPABASE_URL", "https://lmbpvkfcfhdfaihigfdu.supabase.co"
+            )
             service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "<service_role_key>")
         else:
             base_url = require_env("SUPABASE_URL")
