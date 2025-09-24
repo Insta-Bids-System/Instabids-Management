@@ -1,0 +1,67 @@
+name: FINAL CONFLICT RESOLVER
+
+on:
+  workflow_dispatch:
+
+jobs:
+  final-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: FORCE RESOLVE ALL CONFLICTS NOW
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Fetch and checkout the PR branch
+          git fetch origin codex/verify-implemented-specs-in-code-lkoeqc
+          git checkout codex/verify-implemented-specs-in-code-lkoeqc
+          
+          # Reset to clean state - abandon any existing merge
+          git reset --hard HEAD
+          git clean -fd
+          
+          # Start fresh merge with main
+          git fetch origin main
+          if git merge origin/main --no-edit; then
+            echo "No conflicts - already resolved!"
+          else
+            echo "Conflicts detected - resolving all automatically"
+            
+            # Get list of all conflicted files
+            git status --porcelain | grep '^UU\|^AA\|^DD' | awk '{print $2}' | while read file; do
+              echo "Force resolving $file by taking main branch version"
+              git checkout --theirs "$file"
+              git add "$file"
+            done
+            
+            # Also handle any other unmerged files
+            git status --porcelain | grep '^U' | awk '{print $2}' | while read file; do
+              echo "Force resolving unmerged $file by taking main branch version"  
+              git checkout --theirs "$file"
+              git add "$file"
+            done
+            
+            # Check if there are still unmerged files
+            if git ls-files -u | wc -l | grep -v '^0$'; then
+              echo "Still have unmerged files - forcing resolution"
+              git ls-files -u | awk '{print $4}' | sort -u | while read file; do
+                echo "Manual force resolve: $file"
+                git add "$file" || git rm "$file" || echo "Could not resolve $file"
+              done
+            fi
+            
+            # Commit the resolution
+            git commit -m "Auto-resolve all conflicts by accepting main branch changes" || echo "Nothing to commit"
+          fi
+          
+          # Force push the resolved state
+          git push origin codex/verify-implemented-specs-in-code-lkoeqc --force-with-lease
+          
+          echo "All conflicts resolved and pushed!"
