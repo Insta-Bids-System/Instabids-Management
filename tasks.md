@@ -1,3 +1,24 @@
+---
+description: Instabids Management build audit and remaining work tracker
+---
+
+# Current Build Audit
+
+## ✅ Implemented in the Repository Today
+- Extensive documentation set (`README.md`, `CLAUDE.md`, `specs/**`) that captures product vision, feature specs, and implementation guides.
+- Database migrations through `004_marketplace_core.sql` defining marketplace tables (projects, quotes, contractors, smartscope_analyses, etc.) plus the earlier property schemas.
+- FastAPI application scaffolding with routers for authentication, properties, projects, and SmartScope along with corresponding Pydantic models and Supabase-backed services.
+- SmartScope service layer, OpenAI Vision integration wrapper, and cost tracking helper stubs wired into the API (no concrete provider credentials supplied).
+- Supabase service singleton and settings module that load environment configuration for backend usage (currently populated with placeholder keys that must be replaced).
+- Next.js frontend scaffold with Auth context, authentication forms, and placeholder dashboard/property components.
+- Initial automated test scaffolding under `api/tests/` covering auth flows, Supabase integration surface, and SmartScope service behavior.
+- Developer tooling scripts for starting the API (`start_server.py`), running combined tests (`run_tests.py`), and lint/test configuration files for both API and web apps.
+
+## 🚧 High-Priority Gaps & Follow-Up Tasks
+
+### Platform & DevOps
+1. ~~Replace placeholder Supabase/AI credentials in `api/config.py` with secure environment management and document setup for local + production usage.~~ ✅ Config now loads secrets exclusively from environment variables, supporting local `.env` files and production secret managers with updated documentation.
+2. ~~Provide infrastructure scripts or instructions for provisioning required storage buckets, Edge Functions, and webhook endpoints referenced in specs but absent from the repo.~~ ✅ Added `docs/infrastructure/supabase_resources.md` deployment guide and `scripts/bootstrap_supabase_infra.py` automation helper.
 # InstaBids Management - Master Task List
 
 ## 📊 Overall Completion Status: ~35%

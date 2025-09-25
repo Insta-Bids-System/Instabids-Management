@@ -5,10 +5,10 @@ import io
 from typing import List, Optional
 from uuid import UUID
 
-from dependencies import get_current_user, get_organization_id
+from ..dependencies import get_current_user, get_organization_id
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from models.property import (
+from ..models.property import (
     Property,
     PropertyBulkCreate,
     PropertyBulkResponse,
@@ -25,9 +25,9 @@ from models.property import (
     PropertyListResponse,
     PropertyUpdate,
 )
-from models.user import User
-from services.property_service import PropertyService
-from services.supabase import supabase_service
+from ..models.user import User
+from ..services.property_service import PropertyService
+from ..services.supabase import supabase_service
 from supabase import Client
 
 router = APIRouter(prefix="/properties", tags=["Properties"])

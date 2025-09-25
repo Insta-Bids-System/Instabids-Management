@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 import pytest
-from services.supabase import supabase_service
+from api.services.supabase import supabase_service
 from supabase import create_client
 
 

@@ -77,11 +77,11 @@ Status: 30% Complete (Planning Done)
 ```yaml
 Spec: COMPLETED ✅
 Plan: NOT COMPLETED
-Tasks: COMPLETED ✅ (60+ tasks)
-Backend: NOT STARTED
+Tasks: IN PROGRESS (web form submission API delivered; other intake channels outstanding)
+Backend: IN PROGRESS (FastAPI `POST /api/quotes/submit/form` with Supabase persistence and draft support)
 Frontend: NOT STARTED
-Database: NOT STARTED
-Status: 25% Complete (Planning Done)
+Database: PARTIAL (core tables defined; real data writes exercised via API tests)
+Status: 35% Complete (Web form intake operational, remaining channels + UI pending)
 ```
 
 **SmartScope AI**
@@ -98,6 +98,7 @@ Status: 40% Complete (Core service logic exists, but database alignment, UI, and
 ### ✅ Completed Recently
 **Platform & DevOps (Week 3):**
 - [x] Authored Supabase infrastructure bootstrap guide and automation script for storage buckets/webhook-ready Edge Functions.
+- [x] Delivered quote web form submission API with Supabase-backed persistence and automated validation.
 **Foundation Work (Week 1):**
 - [x] Created project structure & documentation framework
 - [x] CLAUDE.md context file

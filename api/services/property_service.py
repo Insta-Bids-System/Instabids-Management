@@ -8,7 +8,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
-from models.property import (
+from ..models.property import (
     Property,
     PropertyBulkCreate,
     PropertyCoordinates,
@@ -23,7 +23,7 @@ from models.property import (
     PropertyType,
     PropertyUpdate,
 )
-from services.supabase import supabase_service
+from .supabase import supabase_service
 from supabase import Client
 
 logger = logging.getLogger(__name__)
